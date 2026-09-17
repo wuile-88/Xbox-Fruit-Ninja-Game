@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>挥砍水果 · 体感互动游戏</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#07161B; --base:#0B1F26; --panel:#12313B; --panel2:#17414E; --line:#2A6273;
+  --bone:#EDE8DE; --dim:#8FB3BC; --amber:#FFB020; --mint:#5FE3C0; --coral:#FF5C5C;
+  --display:'Chakra Petch','Noto Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  --ui:'Noto Sans SC','PingFang SC','Microsoft YaHei',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:#000;color:var(--bone);font-family:var(--ui)}
+body{user-select:none;touch-action:none}
+button{font-family:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,select{font-family:inherit}
+
+/* ---------- 舞台：按设定分辨率渲染，再整体缩放贴合窗口 ---------- */
+#viewport{position:fixed;inset:0;background:#000;overflow:hidden}
+#stage{position:absolute;top:50%;left:50%;transform-origin:center center;overflow:hidden;background:var(--base)}
+#stage.blade-mode{cursor:none}
+
+.screen{position:absolute;inset:0;display:none;background-size:cover;background-position:center}
+.screen.on{display:block}
+.screen.art::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 80% at 50% 42%,transparent 38%,rgba(4,12,15,.6) 100%)}
+.fallback{background-color:var(--base);
+  background-image:radial-gradient(90% 60% at 50% 12%,rgba(255,176,32,.10),transparent 60%),
+    repeating-linear-gradient(135deg,rgba(255,255,255,.02) 0 2px,transparent 2px 15px)}
+
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:1.1em;text-align:center;padding:5% 8%;z-index:3}
+.eyebrow{font-family:var(--display);font-size:.62em;letter-spacing:.42em;text-transform:uppercase;
+  color:var(--amber);font-weight:600}
+.big-title{font-family:var(--display);font-weight:700;font-size:3.4em;line-height:1;
+  text-shadow:0 .1em .5em rgba(0,0,0,.65)}
+.sub{font-size:.86em;color:var(--dim);max-width:20ch;line-height:1.65}
+.press{display:inline-flex;align-items:center;gap:.6em;padding:.6em 1.3em;border-radius:99px;
+  border:.09em solid var(--amber);color:var(--amber);font-family:var(--display);font-weight:600;
+  font-size:.92em;letter-spacing:.14em;background:rgba(255,176,32,.08);animation:breathe 2.1s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.55;transform:translateY(0)}50%{opacity:1;transform:translateY(-.18em)}}
+.result-score{display:flex;align-items:baseline;gap:.4em;font-family:var(--display)}
+.result-score .n{font-size:5em;font-weight:700;font-variant-numeric:tabular-nums;line-height:.9}
+.result-score .u{font-size:.9em;letter-spacing:.3em;color:var(--dim)}
+.win .n{color:var(--mint)}.lose .n{color:var(--coral)}
+.stats-line{display:flex;gap:1.6em;font-family:var(--display);font-size:.7em;color:var(--dim);letter-spacing:.1em}
+.stats-line b{color:var(--bone);font-variant-numeric:tabular-nums}
+
+#gameCanvas{position:absolute;inset:0;z-index:2}
+#dimLayer{position:absolute;inset:0;z-index:1;background:#061217;opacity:0;pointer-events:none}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;top:0;left:0;right:0;z-index:4;padding:1.3em 1.5em;display:grid;gap:.8em;
+  background:linear-gradient(to bottom,rgba(7,22,27,.82),rgba(7,22,27,0))}
+.hud-row{display:flex;align-items:flex-start;justify-content:space-between;gap:1em}
+.stat{display:flex;flex-direction:column;gap:.18em}
+.stat.r{align-items:flex-end}
+.stat-label{font-family:var(--display);font-size:.44em;letter-spacing:.34em;color:var(--dim);font-weight:600}
+.stat-val{font-family:var(--display);font-weight:700;font-variant-numeric:tabular-nums;font-size:2.3em;line-height:.95}
+#timeVal.low{color:var(--coral);animation:tick .6s steps(2) infinite}
+@keyframes tick{50%{opacity:.35}}
+#scoreVal{color:var(--mint)}
+.lives{display:flex;gap:.25em;font-size:.9em;line-height:1;padding-top:.45em}
+.lives i{opacity:.2;font-style:normal;transition:opacity .2s}
+.lives i.on{opacity:1}
+.meter{display:grid;gap:.35em}
+.meter-head{display:flex;justify-content:space-between;font-family:var(--display);font-size:.44em;
+  letter-spacing:.3em;color:var(--dim);font-weight:600}
+.meter-head b{color:var(--amber);letter-spacing:.12em;font-variant-numeric:tabular-nums}
+.segs{position:relative;display:flex;gap:.12em;height:.66em}
+.segs i{flex:1;background:rgba(255,255,255,.09);border-radius:1px;transition:background .12s,box-shadow .12s}
+.segs i.f{background:var(--mint);box-shadow:0 0 .5em rgba(95,227,192,.55)}
+.segs.done i{background:var(--amber);box-shadow:0 0 .55em rgba(255,176,32,.6)}
+.segs::after{content:'';position:absolute;right:-.04em;top:-.25em;bottom:-.25em;width:.09em;background:var(--amber)}
+
+#combo{position:absolute;top:32%;left:0;right:0;z-index:5;text-align:center;pointer-events:none;
+  font-family:var(--display);font-weight:700;opacity:0}
+#combo.pop{animation:combo .95s cubic-bezier(.2,1.4,.4,1)}
+#combo .n{display:block;font-size:3.2em;color:var(--amber);text-shadow:0 0 .4em rgba(255,176,32,.6)}
+#combo .t{display:block;font-size:.66em;letter-spacing:.42em;color:var(--bone)}
+@keyframes combo{0%{opacity:0;transform:scale(.6)}18%{opacity:1;transform:scale(1.08)}
+  30%{transform:scale(1)}72%{opacity:1}100%{opacity:0;transform:scale(1.05) translateY(-.5em)}}
+
+#countdown{position:absolute;inset:0;z-index:6;display:none;place-items:center;background:rgba(7,22,27,.5)}
+#countdown.on{display:grid}
+#countdown span{font-family:var(--display);font-weight:700;font-size:7.5em;color:var(--amber);
+  text-shadow:0 0 .3em rgba(255,176,32,.5);animation:cd .8s ease-out}
+@keyframes cd{0%{transform:scale(2.4);opacity:0}25%{transform:scale(1);opacity:1}100%{transform:scale(.85);opacity:.15}}
+
+#pad{position:absolute;bottom:.9em;left:1.2em;z-index:5;display:flex;align-items:center;gap:.45em;
+  font-family:var(--display);font-size:.42em;letter-spacing:.18em;color:var(--dim);opacity:.7}
+#pad .dot{width:.6em;height:.6em;border-radius:50%;background:#4a5b60}
+#pad.live{color:var(--mint)}#pad.live .dot{background:var(--mint);box-shadow:0 0 .6em var(--mint)}
+
+#hot{position:fixed;top:0;right:0;width:120px;height:120px;z-index:60}
+
+/* ---------- 体感摄像头小窗 ---------- */
+#cam{position:absolute;z-index:7;overflow:hidden;background:#08161B;display:none;
+  box-shadow:0 .25em 1.1em rgba(0,0,0,.55);transition:opacity .2s}
+#cam.on{display:block}
+#cam.br{right:1.1em;bottom:1.1em}
+#cam.bl{left:1.1em;bottom:1.1em}
+#cam.tr{right:1.1em;top:5.6em}
+#cam.tl{left:1.1em;top:5.6em}
+#cam.bd{border:.1em solid var(--amber)}
+#cam img{width:100%;height:100%;object-fit:cover;display:block}
+#cam canvas{position:absolute;inset:0;width:100%;height:100%}
+#cam.mir img,#cam.mir canvas{transform:scaleX(-1)}
+#camOff{position:absolute;inset:0;display:grid;place-items:center;padding:1em;text-align:center;
+  font-family:var(--display);font-size:.4em;letter-spacing:.18em;color:var(--dim);line-height:1.8}
+#cam.live #camOff{display:none}
+#camTag{position:absolute;left:0;right:0;bottom:0;padding:.45em;text-align:center;
+  font-family:var(--display);font-size:.34em;letter-spacing:.22em;color:var(--ink);
+  background:var(--amber);display:none}
+#cam.live #camTag{display:block}
+
+/* ---------- 设定后台 ---------- */
+#setup{position:fixed;inset:0;z-index:100;display:none;background:var(--ink);
+  grid-template-columns:238px 1fr;overflow:hidden;font-size:16px}
+#setup.on{display:grid}
+.rail{background:var(--base);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto}
+.rail-top{padding:24px 20px 18px;border-bottom:1px solid var(--line)}
+.rail-top h1{font-family:var(--display);font-size:17px;letter-spacing:.14em;font-weight:700}
+.rail-top p{font-size:11px;color:var(--dim);margin-top:6px}
+.tab{display:flex;align-items:center;gap:12px;padding:15px 20px;font-size:14px;color:var(--dim);
+  border-left:3px solid transparent;text-align:left;width:100%;transition:.14s}
+.tab:hover{color:var(--bone);background:rgba(255,255,255,.03)}
+.tab.on{color:var(--amber);border-left-color:var(--amber);background:rgba(255,176,32,.07)}
+.tab .num{font-family:var(--display);font-size:11px;opacity:.6;font-variant-numeric:tabular-nums}
+.rail-bot{margin-top:auto;padding:18px 20px;border-top:1px solid var(--line);display:grid;gap:9px}
+.pane{overflow-y:auto;padding:34px clamp(24px,3.5vw,54px) 90px}
+.sec{display:none;max-width:1080px}
+.sec.on{display:block;animation:fade .22s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.sec-h{margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.sec-h h2{font-family:var(--display);font-size:26px;font-weight:700}
+.sec-h p{font-size:13px;color:var(--dim);margin-top:7px;line-height:1.6}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h3{font-size:13px;font-weight:600;letter-spacing:.06em;margin-bottom:12px}
+.card .hint{font-size:11px;color:var(--dim);margin-top:9px;line-height:1.55}
+
+.res-presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.res{padding:9px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);
+  font-family:var(--display);font-size:13px;font-weight:600;text-align:center;line-height:1.25}
+.res small{display:block;font-family:var(--ui);font-size:10px;font-weight:400;color:var(--dim);letter-spacing:.05em}
+.res:hover{border-color:var(--amber);color:var(--amber)}
+.res.on{background:var(--amber);color:var(--ink);border-color:var(--amber)}
+.res.on small{color:rgba(7,22,27,.7)}
+.res-live{display:flex;align-items:center;gap:20px;flex-wrap:wrap;background:var(--panel2);
+  border:1px solid var(--line);border-radius:9px;padding:14px 16px;margin-top:14px}
+.res-live div{display:grid;gap:3px}
+.res-live b{font-family:var(--display);font-size:18px;font-weight:700;color:var(--amber);font-variant-numeric:tabular-nums}
+.res-live i{font-style:normal;font-size:10px;letter-spacing:.2em;color:var(--dim)}
+.res-shape{width:56px;height:56px;display:grid;place-items:center;flex:none}
+.res-shape span{background:var(--amber);border-radius:2px;display:block}
+
+.slotwrap{position:relative}
+.slot{position:relative;width:100%;border-radius:8px;overflow:hidden;border:1px dashed var(--line);
+  background:var(--panel2) center/cover no-repeat;display:grid;place-items:center;transition:.15s}
+.slot:hover{border-color:var(--amber)}
+.slot span{font-size:12px;color:var(--dim);padding:8px;text-align:center;line-height:1.5}
+.slot.has span{display:none}
+.slot-x{position:absolute;top:7px;right:7px;width:24px;height:24px;border-radius:5px;
+  background:rgba(7,22,27,.85);color:var(--coral);font-size:15px;display:none;place-items:center}
+.slot.has+.slot-x{display:grid}
+
+.items{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+.item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px;display:grid;gap:9px}
+.item.bad{border-color:#5C2B2B}
+.item .thumb{width:100%;aspect-ratio:1;border-radius:8px;background:var(--panel2) center/contain no-repeat;
+  border:1px dashed var(--line);display:grid;place-items:center;font-size:44px;line-height:1}
+.item .thumb:hover{border-color:var(--amber)}
+.item .row{display:flex;gap:7px;align-items:center}
+.item .row label{font-size:10px;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.item input[type=color]{width:38px;height:32px;padding:2px;border:1px solid var(--line);border-radius:6px;
+  background:var(--panel2);cursor:pointer;flex:none}
+.item .del{font-size:11px;color:var(--coral);padding:6px;border-radius:5px;background:rgba(255,92,92,.09)}
+.item .del:hover{background:rgba(255,92,92,.2)}
+.add{border:1px dashed var(--line);border-radius:10px;display:grid;place-items:center;min-height:190px;
+  color:var(--dim);font-size:13px;gap:6px}
+.add:hover{border-color:var(--amber);color:var(--amber)}
+.add b{font-size:26px;font-weight:400}
+
+.field{display:grid;gap:7px}
+.field label{font-size:11px;color:var(--dim);letter-spacing:.13em;font-weight:600}
+.inp{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:10px 12px;
+  color:var(--bone);font-size:14px;width:100%;font-variant-numeric:tabular-nums}
+.inp:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:transparent}
+.rng{width:100%;accent-color:var(--amber);background:transparent}
+.rngrow{display:flex;align-items:center;gap:12px}
+.rngval{font-family:var(--display);font-size:14px;font-weight:600;color:var(--amber);
+  min-width:74px;text-align:right;font-variant-numeric:tabular-nums}
+.stepper{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;width:fit-content}
+.stepper button{width:38px;height:38px;background:var(--panel2);font-size:17px;color:var(--amber)}
+.stepper button:hover{background:var(--line)}
+.stepper input{width:64px;height:38px;text-align:center;background:var(--panel);border:0;color:var(--bone);
+  font-family:var(--display);font-weight:600;font-size:15px}
+.switch{display:flex;align-items:center;gap:11px;cursor:pointer;font-size:13px;line-height:1.5}
+.switch input{width:0;height:0;opacity:0;position:absolute}
+.track{width:44px;height:24px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);
+  position:relative;transition:.18s;flex:none}
+.track::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:var(--dim);transition:.18s}
+.switch input:checked+.track{background:rgba(255,176,32,.25);border-color:var(--amber)}
+.switch input:checked+.track::after{transform:translateX(20px);background:var(--amber)}
+.switch input:focus-visible+.track{outline:2px solid var(--amber);outline-offset:2px}
+.btn{padding:11px 18px;border-radius:8px;font-size:13px;font-weight:600;letter-spacing:.06em;
+  background:var(--panel2);border:1px solid var(--line);transition:.15s;text-align:center}
+.btn:hover{border-color:var(--amber);color:var(--amber)}
+.btn.primary{background:var(--amber);color:var(--ink);border-color:var(--amber)}
+.btn.primary:hover{filter:brightness(1.12);color:var(--ink)}
+.btn.danger{color:var(--coral);border-color:#5C2B2B}
+.btn.danger:hover{background:rgba(255,92,92,.13);border-color:var(--coral)}
+.audio-row{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);
+  border-radius:9px;padding:12px 14px}
+.audio-row .nm{flex:1;min-width:0}
+.audio-row .nm b{display:block;font-size:13px;font-weight:600}
+.audio-row .nm i{display:block;font-size:11px;color:var(--dim);font-style:normal;margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.audio-row .nm i.set{color:var(--mint)}
+.mini{padding:7px 11px;font-size:12px;border-radius:6px;background:var(--panel2);border:1px solid var(--line)}
+.mini:hover{border-color:var(--amber);color:var(--amber)}
+.note{background:rgba(255,176,32,.08);border-left:3px solid var(--amber);border-radius:0 8px 8px 0;
+  padding:13px 16px;font-size:12px;color:var(--dim);line-height:1.8;margin-top:18px}
+.note b{color:var(--amber);font-weight:600}
+.note code{font-family:ui-monospace,Menlo,monospace;background:rgba(0,0,0,.35);padding:2px 6px;
+  border-radius:4px;color:var(--bone);font-size:11px}
+.padbox{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:16px}
+.padbox .lamp{width:13px;height:13px;border-radius:50%;background:#4a5b60;flex:none}
+.padbox.live .lamp{background:var(--mint);box-shadow:0 0 12px var(--mint)}
+.padbox .txt b{display:block;font-size:14px}
+.padbox .txt i{font-style:normal;font-size:11px;color:var(--dim);display:block;margin-top:3px}
+#toast{position:fixed;bottom:26px;left:50%;transform:translate(-50%,90px);z-index:200;background:var(--amber);
+  color:var(--ink);padding:12px 24px;border-radius:99px;font-size:13px;font-weight:600;
+  transition:transform .28s cubic-bezier(.2,1.2,.4,1);pointer-events:none}
+#toast.on{transform:translate(-50%,0)}
+#toast.err{background:var(--coral);color:#fff}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+@media (max-width:820px){#setup.on{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .rail{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .rail-top,.rail-bot{display:none}
+  .tab{border-left:0;border-bottom:3px solid transparent;white-space:nowrap}
+  .tab.on{border-left:0;border-bottom-color:var(--amber)}}
+</style>
+</head>
+<body>
+
+<div id="viewport">
+  <div id="stage">
+
+    <section id="s-home" class="screen fallback art">
+      <div class="center">
+        <div class="eyebrow">体感互动 · 挥砍水果</div>
+        <h1 class="big-title" id="homeTitle">挥手切水果</h1>
+        <p class="sub" id="homeSub">挥动手臂划过水果即可切开，小心别碰到炸弹</p>
+        <div class="press" id="homeCta">挥手开始</div>
+      </div>
+    </section>
+
+    <section id="s-game" class="screen fallback">
+      <div id="dimLayer"></div>
+      <canvas id="gameCanvas"></canvas>
+      <div id="hud">
+        <div class="hud-row">
+          <div class="stat"><div class="stat-label">剩余时间</div><div class="stat-val" id="timeVal">60</div></div>
+          <div class="lives" id="lives"></div>
+          <div class="stat r"><div class="stat-label">得分</div><div class="stat-val" id="scoreVal">0</div></div>
+        </div>
+        <div class="meter">
+          <div class="meter-head"><span>目标进度</span><b><span id="mNow">0</span> / <span id="mGoal">100</span></b></div>
+          <div class="segs" id="segs"></div>
+        </div>
+      </div>
+      <div id="combo"><span class="n" id="comboN">×3</span><span class="t" id="comboT">连击 +30</span></div>
+      <div id="countdown"><span id="cdNum">3</span></div>
+      <div id="pad"><span class="dot"></span><span id="padTxt">鼠标测试模式</span></div>
+    </section>
+
+    <section id="s-win" class="screen fallback art">
+      <div class="center">
+        <div class="eyebrow" style="color:var(--mint)">挑战成功</div>
+        <h1 class="big-title" id="winTitle">恭喜通关</h1>
+        <div class="result-score win"><span class="n" id="winScore">0</span><span class="u">分</span></div>
+        <div class="stats-line"><span>切中 <b id="winCut">0</b></span><span>最高连击 <b id="winCombo">0</b></span></div>
+        <div class="press">挥手或点击返回首页</div>
+      </div>
+    </section>
+
+    <section id="s-lose" class="screen fallback art">
+      <div class="center">
+        <div class="eyebrow" style="color:var(--coral)">挑战失败</div>
+        <h1 class="big-title" id="loseTitle">再试一次</h1>
+        <div class="result-score lose"><span class="n" id="loseScore">0</span><span class="u">分</span></div>
+        <p class="sub" id="loseSub"></p>
+        <div class="press">挥手或点击返回首页</div>
+      </div>
+    </section>
+
+    <div id="cam" class="br">
+      <img id="camImg" alt="">
+      <canvas id="camSkel"></canvas>
+      <div id="camOff">体感摄像头<br>未连接</div>
+      <div id="camTag">你</div>
+    </div>
+
+  </div>
+</div>
+
+<div id="hot"></div>
+
+<!-- ==================== 设定后台 ==================== -->
+<div id="setup">
+  <nav class="rail">
+    <div class="rail-top"><h1>设定后台</h1><p>右上角双击 / 按 Q 进入 · Q 或 Esc 退出</p></div>
+    <button class="tab on" data-sec="screen"><span class="num">01</span>屏幕与页面</button>
+    <button class="tab" data-sec="good"><span class="num">02</span>水果（加分）</button>
+    <button class="tab" data-sec="bad"><span class="num">03</span>炸弹（扣分）</button>
+    <button class="tab" data-sec="rules"><span class="num">04</span>玩法与胜负</button>
+    <button class="tab" data-sec="sound"><span class="num">05</span>音乐与音效</button>
+    <button class="tab" data-sec="device"><span class="num">06</span>设备与输入</button>
+    <button class="tab" data-sec="kinect"><span class="num">07</span>体感摄像头</button>
+    <button class="tab" data-sec="data"><span class="num">08</span>配置存档</button>
+    <div class="rail-bot">
+      <button class="btn primary" id="btnSaveExit">保存并退出</button>
+      <button class="btn" id="btnPreview">试玩一次</button>
+    </div>
+  </nav>
+
+  <div class="pane">
+    <!-- 01 -->
+    <section class="sec on" data-sec="screen">
+      <div class="sec-h"><h2>屏幕分辨率</h2>
+        <p>设定游戏的设计分辨率，画面整体缩放贴合显示器，素材与字号自动跟着变。竖屏大屏选 1080 × 1920。</p></div>
+      <div class="card">
+        <div class="res-presets" id="resPresets"></div>
+        <div class="grid g3">
+          <div class="field"><label>宽度（px）</label><input class="inp" id="resW" type="number" min="320" max="7680"></div>
+          <div class="field"><label>高度（px）</label><input class="inp" id="resH" type="number" min="320" max="7680"></div>
+          <div class="field"><label>贴合方式</label>
+            <select class="inp" id="resFit">
+              <option value="contain">完整显示（留黑边）</option>
+              <option value="cover">铺满屏幕（裁切）</option>
+            </select></div>
+        </div>
+        <div class="res-live">
+          <div class="res-shape"><span id="resShape"></span></div>
+          <div><b id="resRatio">9 : 16</b><i>画面比例</i></div>
+          <div><b id="resScale">100%</b><i>当前窗口缩放</i></div>
+          <div><b id="resOrient">竖屏</b><i>方向</i></div>
+          <button class="btn primary" id="resApply" style="margin-left:auto">应用分辨率</button>
+        </div>
+        <p class="hint">物理参数（水果大小、重力、抛射高度、刀锋灵敏度）都按屏幕百分比计算，换分辨率后手感一致，不用重调。</p>
+      </div>
+
+      <div class="sec-h" style="margin-top:34px"><h2>页面图片与文字</h2>
+        <p>四张全屏图请按上面的分辨率制作，比例不符会被裁切。</p></div>
+      <div class="grid g2" id="screenSlots"></div>
+      <div class="grid g2" style="margin-top:18px">
+        <div class="card"><h3>首页文字</h3>
+          <div class="grid" style="gap:12px">
+            <div class="field"><label>主标题</label><input class="inp" id="txtHomeTitle"></div>
+            <div class="field"><label>副标题</label><input class="inp" id="txtHomeSub"></div>
+            <div class="field"><label>开始提示</label><input class="inp" id="txtHomeCta"></div>
+          </div></div>
+        <div class="card"><h3>结算文字</h3>
+          <div class="grid" style="gap:12px">
+            <div class="field"><label>成功页标题</label><input class="inp" id="txtWin"></div>
+            <div class="field"><label>失败页标题</label><input class="inp" id="txtLose"></div>
+          </div>
+          <p class="hint">背景图里已经画好标题的话，把这里清空即可隐藏文字。</p></div>
+      </div>
+    </section>
+
+    <!-- 02 -->
+    <section class="sec" data-sec="good">
+      <div class="sec-h"><h2>水果（加分）</h2>
+        <p>切中即加分。汁液颜色用于切开时的溅射特效，上传图片时自动取色，也可手动改。</p></div>
+      <div class="card" style="margin-bottom:18px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+        <div><h3 style="margin:0 0 8px">水果数量</h3>
+          <div class="stepper"><button data-cnt="good" data-d="-1">−</button>
+            <input id="cntGood" type="number" readonly><button data-cnt="good" data-d="1">+</button></div></div>
+        <div style="flex:1;min-width:230px"><h3 style="margin:0 0 8px">批量设定分数</h3>
+          <div class="rngrow"><input class="rng" id="bulkGood" type="range" min="1" max="50" value="10">
+            <button class="mini" id="bulkGoodApply">全部设为 <span id="bulkGoodVal">10</span> 分</button></div></div>
+      </div>
+      <div class="items" id="listGood"></div>
+    </section>
+
+    <!-- 03 -->
+    <section class="sec" data-sec="bad">
+      <div class="sec-h"><h2>炸弹（扣分）</h2>
+        <p>切中即扣分。分数填正数，系统按扣分计算。</p></div>
+      <div class="card" style="margin-bottom:18px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+        <div><h3 style="margin:0 0 8px">炸弹数量</h3>
+          <div class="stepper"><button data-cnt="bad" data-d="-1">−</button>
+            <input id="cntBad" type="number" readonly><button data-cnt="bad" data-d="1">+</button></div></div>
+        <div style="flex:1;min-width:230px"><h3 style="margin:0 0 8px">炸弹出现比例</h3>
+          <div class="rngrow"><input class="rng" id="rBadRatio" type="range" min="0" max="60" step="5">
+            <span class="rngval" id="vBadRatio">18%</span></div>
+          <label class="switch" style="margin-top:12px"><input type="checkbox" id="cBombFail"><span class="track"></span>切中炸弹立即结束游戏</label>
+        </div>
+      </div>
+      <div class="items" id="listBad"></div>
+    </section>
+
+    <!-- 04 -->
+    <section class="sec" data-sec="rules">
+      <div class="sec-h"><h2>玩法与胜负</h2>
+        <p>时间到时得分 ≥ 目标分即进入成功页，否则进入失败页。</p></div>
+      <div class="grid g2">
+        <div class="card"><h3>胜负条件</h3>
+          <div class="grid" style="gap:16px">
+            <div class="field"><label>游戏时长（秒）</label>
+              <div class="rngrow"><input class="rng" id="rDur" type="range" min="15" max="300" step="5"><span class="rngval" id="vDur"></span></div></div>
+            <div class="field"><label>通关目标分</label>
+              <div class="rngrow"><input class="rng" id="rGoal" type="range" min="10" max="800" step="10"><span class="rngval" id="vGoal"></span></div></div>
+            <div class="field"><label>漏掉水果扣分</label>
+              <div class="rngrow"><input class="rng" id="rMiss" type="range" min="0" max="20" step="1"><span class="rngval" id="vMiss"></span></div></div>
+            <div class="field"><label>生命数（0 = 不限）</label>
+              <div class="rngrow"><input class="rng" id="rLives" type="range" min="0" max="9" step="1"><span class="rngval" id="vLives"></span></div></div>
+            <div class="field"><label>结算页停留秒数（到时自动回首页）</label>
+              <div class="rngrow"><input class="rng" id="rHold" type="range" min="0" max="30" step="1"><span class="rngval" id="vHold"></span></div></div>
+            <label class="switch"><input type="checkbox" id="cAllowNeg"><span class="track"></span>允许负分（关闭则最低为 0）</label>
+          </div></div>
+
+        <div class="card"><h3>抛出节奏</h3>
+          <div class="grid" style="gap:16px">
+            <div class="field"><label>抛出间隔（毫秒）</label>
+              <div class="rngrow"><input class="rng" id="rSpawn" type="range" min="300" max="3000" step="50"><span class="rngval" id="vSpawn"></span></div></div>
+            <div class="field"><label>每次最少抛出</label>
+              <div class="rngrow"><input class="rng" id="rBMin" type="range" min="1" max="6" step="1"><span class="rngval" id="vBMin"></span></div></div>
+            <div class="field"><label>每次最多抛出</label>
+              <div class="rngrow"><input class="rng" id="rBMax" type="range" min="1" max="8" step="1"><span class="rngval" id="vBMax"></span></div></div>
+            <div class="field"><label>抛射高度（占屏高 %）</label>
+              <div class="rngrow"><input class="rng" id="rArc" type="range" min="35" max="95" step="5"><span class="rngval" id="vArc"></span></div></div>
+            <div class="field"><label>重力（越大落得越快）</label>
+              <div class="rngrow"><input class="rng" id="rGrav" type="range" min="50" max="250" step="10"><span class="rngval" id="vGrav"></span></div></div>
+          </div></div>
+
+        <div class="card"><h3>水果与刀锋</h3>
+          <div class="grid" style="gap:16px">
+            <div class="field"><label>水果大小（占屏宽 %）</label>
+              <div class="rngrow"><input class="rng" id="rSize" type="range" min="6" max="26" step="1"><span class="rngval" id="vSize"></span></div></div>
+            <div class="field"><label>挥砍灵敏度（越低越容易切中）</label>
+              <div class="rngrow"><input class="rng" id="rSens" type="range" min="2" max="40" step="1"><span class="rngval" id="vSens"></span></div></div>
+            <div class="field"><label>刀锋拖尾长度</label>
+              <div class="rngrow"><input class="rng" id="rTrail" type="range" min="60" max="400" step="20"><span class="rngval" id="vTrail"></span></div></div>
+            <div class="field"><label>刀锋粗细</label>
+              <div class="rngrow"><input class="rng" id="rBlade" type="range" min="4" max="40" step="1"><span class="rngval" id="vBlade"></span></div></div>
+          </div></div>
+
+        <div class="card"><h3>画面可读性</h3>
+          <div class="grid" style="gap:16px">
+            <div class="field"><label>水果光晕强度</label>
+              <div class="rngrow"><input class="rng" id="rGlow" type="range" min="0" max="100" step="5"><span class="rngval" id="vGlow"></span></div></div>
+            <div class="field"><label>游戏背景压暗</label>
+              <div class="rngrow"><input class="rng" id="rDim" type="range" min="0" max="80" step="5"><span class="rngval" id="vDim"></span></div></div>
+          </div>
+          <p class="hint">光晕会用每个水果自己的颜色在它背后铺一层辉光，再加一层暗投影——深色背景靠辉光分离，浅色或花哨的背景图靠投影分离。背景图太亮太花时把「压暗」拉到 35% 以上，水果立刻跳出来。</p>
+        </div>
+
+        <div class="card"><h3>连击与难度</h3>
+          <label class="switch" style="margin-bottom:14px"><input type="checkbox" id="cCombo"><span class="track"></span>开启连击奖励</label>
+          <div class="field" style="margin-bottom:14px"><label>连击判定窗口（毫秒）</label>
+            <div class="rngrow"><input class="rng" id="rComboWin" type="range" min="200" max="1500" step="50"><span class="rngval" id="vComboWin"></span></div></div>
+          <div class="field" style="margin-bottom:14px"><label>每多切一个额外加分</label>
+            <div class="rngrow"><input class="rng" id="rComboBonus" type="range" min="0" max="30" step="1"><span class="rngval" id="vComboBonus"></span></div></div>
+          <label class="switch" style="margin-bottom:14px"><input type="checkbox" id="cRamp"><span class="track"></span>难度递增（越后面抛得越密）</label>
+          <div class="field"><label>结束时节奏倍数</label>
+            <div class="rngrow"><input class="rng" id="rRamp" type="range" min="100" max="300" step="10"><span class="rngval" id="vRamp"></span></div></div>
+          <label class="switch" style="margin-top:14px"><input type="checkbox" id="cCountdown"><span class="track"></span>开场 3-2-1 倒数</label>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 -->
+    <section class="sec" data-sec="sound">
+      <div class="sec-h"><h2>音乐与音效</h2>
+        <p>支持 mp3 / wav / ogg / m4a。背景音乐循环播放，玩家第一次操作后开始出声。</p></div>
+      <div class="grid" style="gap:10px" id="audioRows"></div>
+      <div class="grid g2" style="margin-top:20px">
+        <div class="card"><h3>音量</h3>
+          <div class="field" style="margin-bottom:14px"><label>背景音乐</label>
+            <div class="rngrow"><input class="rng" id="rVolBgm" type="range" min="0" max="100"><span class="rngval" id="vVolBgm"></span></div></div>
+          <div class="field"><label>音效</label>
+            <div class="rngrow"><input class="rng" id="rVolSfx" type="range" min="0" max="100"><span class="rngval" id="vVolSfx"></span></div></div>
+        </div>
+        <div class="card"><h3>播放行为</h3>
+          <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="cBgmMenu"><span class="track"></span>首页也播放背景音乐</label>
+          <label class="switch"><input type="checkbox" id="cDuck"><span class="track"></span>结算时停止背景音乐</label>
+        </div>
+      </div>
+    </section>
+
+    <!-- 06 -->
+    <section class="sec" data-sec="device">
+      <div class="sec-h"><h2>设备与输入</h2>
+        <p>目前默认鼠标测试模式。接上体感设备后不用改游戏逻辑，通过桥接接口喂坐标即可。</p></div>
+
+      <div class="card" style="margin-bottom:16px"><h3>鼠标测试模式</h3>
+        <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="cMouse"><span class="track"></span>启用鼠标 / 触摸挥砍</label>
+        <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="cHold"><span class="track"></span>需要按住左键才挥砍（关闭 = 移动即挥砍，更接近体感手感）</label>
+        <label class="switch"><input type="checkbox" id="cHideCursor"><span class="track"></span>游戏中隐藏系统光标，只显示刀锋</label>
+        <p class="hint">觉得切不中就把「挥砍灵敏度」调低——那是触发切割所需的最低挥动速度，单位是每秒移动距离占屏高的百分比。</p>
+      </div>
+
+      <div class="padbox" id="padBox"><span class="lamp"></span>
+        <div class="txt"><b id="padName">未检测到手柄</b><i>Xbox 手柄可用右摇杆控制刀锋，A 键开始</i></div>
+        <button class="mini" id="btnFs" style="margin-left:auto">切换全屏</button></div>
+
+      <div class="grid g2" style="margin-top:16px">
+        <div class="card"><h3>手柄</h3>
+          <div class="field" style="margin-bottom:14px"><label>摇杆死区</label>
+            <div class="rngrow"><input class="rng" id="rDead" type="range" min="0" max="60" step="5"><span class="rngval" id="vDead"></span></div></div>
+          <div class="field" style="margin-bottom:14px"><label>摇杆刀锋速度</label>
+            <div class="rngrow"><input class="rng" id="rPadSpd" type="range" min="500" max="4000" step="100"><span class="rngval" id="vPadSpd"></span></div></div>
+          <label class="switch"><input type="checkbox" id="cRumble"><span class="track"></span>切中时手柄震动</label>
+        </div>
+        <div class="card"><h3>体感双手</h3>
+          <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="cTwoHands"><span class="track"></span>启用双手刀锋（左右手各一把）</label>
+          <div class="field"><label>体感坐标平滑（越大越稳但越迟钝）</label>
+            <div class="rngrow"><input class="rng" id="rSmooth" type="range" min="0" max="80" step="5"><span class="rngval" id="vSmooth"></span></div></div>
+          <p class="hint">建议先用 0.3 左右，骨骼点抖动明显时再往上加。</p>
+        </div>
+      </div>
+
+      <div class="note"><b>接 Kinect / Xbox 体感设备：</b>用 WebSocket 把骨骼坐标转发进来即可，游戏逻辑不用改。<br>
+        <code>window.Bridge.hand(0, x, y)</code> 右手，x/y 为 0~1 归一化坐标（0,0 是左上角）<br>
+        <code>window.Bridge.hand(1, x, y)</code> 左手（需开启双手刀锋）<br>
+        <code>window.Bridge.release(0)</code> 该只手离开画面，收起刀锋<br>
+        <code>window.Bridge.start()</code> 触发开始 / 重玩，可绑定「举手」手势<br>
+        <code>window.Bridge.status(true)</code> 点亮左下角设备状态灯<br>
+        画面默认做左右镜像：玩家举右手，刀锋出现在屏幕右侧，符合照镜子的直觉。要关掉改 <code>Bridge.mirror = false</code>。</div>
+    </section>
+
+    <!-- 07 体感摄像头 -->
+    <section class="sec" data-sec="kinect">
+      <div class="sec-h"><h2>体感摄像头</h2>
+        <p>Kinect v2 的骨骼与画面由本机桥接程序 KinectBridge.exe 提供，游戏自动连接、断线自动重试。</p></div>
+
+      <div class="padbox" id="kinBox"><span class="lamp"></span>
+        <div class="txt"><b id="kinName">未连接桥接程序</b><i id="kinInfo">请先运行 KinectBridge.exe</i></div>
+        <button class="mini" id="kinReconnect" style="margin-left:auto">立即重连</button></div>
+
+      <div class="grid g2" style="margin-top:16px">
+        <div class="card"><h3>连接</h3>
+          <label class="switch" style="margin-bottom:14px"><input type="checkbox" id="cKOn"><span class="track"></span>启用体感摄像头</label>
+          <div class="field"><label>桥接地址</label><input class="inp" id="kUrl" placeholder="127.0.0.1:8181"></div>
+          <p class="hint">桥接程序和游戏在同一台机器时保持默认。若跑在另一台机器上，填对方 IP 和端口。</p>
+        </div>
+
+        <div class="card"><h3>小窗位置与外观</h3>
+          <div class="field" style="margin-bottom:14px"><label>位置</label>
+            <select class="inp" id="kPos">
+              <option value="br">右下角</option><option value="bl">左下角</option>
+              <option value="tr">右上角</option><option value="tl">左上角</option>
+            </select></div>
+          <div class="field" style="margin-bottom:14px"><label>宽度（占屏宽 %）</label>
+            <div class="rngrow"><input class="rng" id="rKSize" type="range" min="10" max="50" step="1"><span class="rngval" id="vKSize"></span></div></div>
+          <div class="field" style="margin-bottom:14px"><label>圆角（50% = 正圆）</label>
+            <div class="rngrow"><input class="rng" id="rKRad" type="range" min="0" max="50" step="1"><span class="rngval" id="vKRad"></span></div></div>
+          <div class="field"><label>不透明度</label>
+            <div class="rngrow"><input class="rng" id="rKOp" type="range" min="30" max="100" step="5"><span class="rngval" id="vKOp"></span></div></div>
+        </div>
+
+        <div class="card"><h3>显示内容</h3>
+          <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="cKMirror"><span class="track"></span>左右镜像（照镜子效果，建议开）</label>
+          <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="cKSkel"><span class="track"></span>叠加骨骼线</label>
+          <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="cKBorder"><span class="track"></span>琥珀色边框</label>
+          <label class="switch"><input type="checkbox" id="cKHome"><span class="track"></span>首页和结算页也显示小窗</label>
+          <p class="hint">抠像（只显示人物、去掉背景）在桥接程序端开关，启动参数加 <code>--cutout</code>。</p>
+        </div>
+
+        <div class="card"><h3>操控</h3>
+          <div class="field" style="margin-bottom:14px"><label>手部活动范围（越小越省力）</label>
+            <div class="rngrow"><input class="rng" id="rKRange" type="range" min="40" max="100" step="5"><span class="rngval" id="vKRange"></span></div></div>
+          <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="cKRaise"><span class="track"></span>举手过头开始游戏</label>
+          <p class="hint">活动范围是把摄像头画面中间这一块映射到整个屏幕。设 70% 表示玩家手只要在画面中间 70% 的区域移动，就能覆盖屏幕左右两端，不用把手伸到极限。双手刀锋在「设备与输入」里开。</p>
+        </div>
+      </div>
+
+      <div class="note"><b>Windows 现场部署步骤：</b><br>
+        1. 装好 Kinect for Windows SDK 2.0，插上 Kinect v2 和它的电源适配器（这个适配器必须有，只插 USB 不供电）。<br>
+        2. 运行 <code>build.bat</code> 编译出 <code>KinectBridge.exe</code>（不需要装 Visual Studio）。<br>
+        3. 双击 <code>启动游戏.bat</code>，它会先起桥接程序，再用 Chrome 全屏无边框打开游戏。<br>
+        4. 想开机自启：把 <code>启动游戏.bat</code> 的快捷方式放进 <code>shell:startup</code> 目录。<br>
+        桥接程序同时提供 <code>ws://127.0.0.1:8181/ws</code>（骨骼数据）和 <code>http://127.0.0.1:8181/video</code>（MJPEG 画面），浏览器里直接打开后者可以单独确认摄像头是否正常。</div>
+    </section>
+
+    <!-- 08 -->
+    <section class="sec" data-sec="data">
+      <div class="sec-h"><h2>配置存档</h2>
+        <p>导出的 config.json 含全部图片与音频，换机器导入即可复原。</p></div>
+      <div class="grid g3">
+        <button class="btn primary" id="btnExport">导出 config.json</button>
+        <button class="btn" id="btnImport">导入配置文件</button>
+        <button class="btn danger" id="btnReset">恢复出厂设置</button>
+      </div>
+      <div class="card" style="margin-top:18px"><h3>当前配置体积</h3>
+        <div id="sizeInfo" style="font-family:var(--display);font-size:24px;font-weight:700;color:var(--amber)">—</div>
+        <p class="hint">上传自动压缩：背景图最长边按分辨率、上限 2160；水果图最长边 512 并保留 PNG 透明底。</p></div>
+      <div class="note"><b>现场部署：</b>把导出的 <code>config.json</code> 与 HTML 放同一目录，用本地服务器打开（<code>python3 -m http.server</code>），开机自动读取配置，断电重启不丢设定。直接 <code>file://</code> 双击打开时浏览器禁止读本地文件，需每次手动导入。</div>
+    </section>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ==========================================================
+   配置
+   ========================================================== */
+const uid = () => Math.random().toString(36).slice(2, 9);
+const FRUITS = [
+  ['🍎','#E4392E'],['🍌','#F2D24B'],['🍇','#8F5FC0'],['🍊','#F79B26'],
+  ['🍓','#E43B5A'],['🍉','#EF4B5C'],['🍑','#F7A072'],['🥝','#8CC63E'],
+  ['🍐','#B6D94C'],['🍍','#F2C230'],['🥭','#F4A02C'],['🍒','#D63447']
+];
+const BOMBS = [['💣','#FF5C5C'],['🧨','#FF7A3D'],['☠️','#FF5C5C']];
+
+function mkItem(kind, i){
+  const src = kind === 'good' ? FRUITS : BOMBS;
+  const [glyph, color] = src[i % src.length];
+  return { id:uid(), name:(kind === 'good' ? '水果 ' : '炸弹 ') + (i + 1),
+           glyph, color, img:null, score: kind === 'good' ? 10 : 20, weight:1 };
+}
+function defaults(){
+  return {
+    v:2,
+    display:{ w:1080, h:1920, fit:'contain' },
+    images:{ home:null, game:null, win:null, lose:null },
+    texts:{ homeTitle:'挥手切水果', homeSub:'挥动手臂划过水果即可切开，小心别碰到炸弹',
+            homeCta:'挥手开始', win:'恭喜通关', lose:'再试一次' },
+    good: Array.from({length:10}, (_,i) => mkItem('good', i)),
+    bad:  Array.from({length:3},  (_,i) => mkItem('bad',  i)),
+    rules:{ duration:60, goal:150, missPenalty:0, lives:0, allowNeg:false,
+            spawn:1100, burstMin:1, burstMax:3, arc:70, gravity:110, badRatio:18,
+            size:16, sens:12, trail:180, blade:14, glow:55, dim:25,
+            combo:true, comboWin:600, comboBonus:5, ramp:true, rampTo:170,
+            countdown:true, bombFail:false, resultHold:8 },
+    audio:{ bgm:null, cut:null, bomb:null, swish:null, combo:null, win:null, lose:null },
+    audioNames:{ bgm:'', cut:'', bomb:'', swish:'', combo:'', win:'', lose:'' },
+    vol:{ bgm:60, sfx:90, bgmMenu:true, duck:true },
+    input:{ mouse:true, hold:false, hideCursor:true, deadzone:20, padSpeed:1600,
+            rumble:true, twoHands:false, smooth:30 },
+    kinect:{ on:true, url:'127.0.0.1:8181', pos:'br', size:26, radius:6, opacity:100,
+             mirror:true, skeleton:true, border:true, onHome:true, range:70, raiseStart:true }
+  };
+}
+let cfg = defaults();
+
+/* ==========================================================
+   工具
+   ========================================================== */
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const rand = (a,b) => a + Math.random() * (b - a);
+
+/* 存储层：Claude 预览环境用 window.storage；
+   在自己的 Windows 上（Chrome / Edge 打开）自动改用 localStorage，
+   设定改完即存，断电重启也不会丢，不必每次导入 config.json */
+const Store = {
+  async get(k){
+    try { if (window.storage){ const r = await window.storage.get(k); return r ? JSON.parse(r.value) : null; } }
+    catch(e){}
+    try { const s = window.localStorage && localStorage.getItem(k); if (s) return JSON.parse(s); }
+    catch(e){}
+    return null;
+  },
+  async set(k, v){
+    try { if (window.storage){ await window.storage.set(k, JSON.stringify(v)); return true; } }
+    catch(e){ console.warn(e); }
+    try { localStorage.setItem(k, JSON.stringify(v)); return true; }
+    catch(e){ console.warn('本地存储写入失败（可能超出容量）', e); }
+    return false;
+  }
+};
+async function saveCfg(silent){
+  const ok = await Store.set('ninjaCfg', cfg);
+  if (!silent) toast(ok ? '已保存' : '保存失败，请用「导出 config.json」备份', !ok);
+  updateSize();
+}
+let toastT;
+function toast(msg, err){
+  const t = $('#toast'); t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600);
+}
+function pickFile(accept){
+  return new Promise(res => { const i = document.createElement('input');
+    i.type = 'file'; i.accept = accept; i.onchange = () => res(i.files[0] || null); i.click(); });
+}
+function readDataURL(f){
+  return new Promise((res,rej) => { const r = new FileReader();
+    r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+}
+function shrink(dataURL, max, alpha){
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const s = Math.min(1, max / Math.max(im.width, im.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(im.width * s)); c.height = Math.max(1, Math.round(im.height * s));
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      res(alpha ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.85));
+    };
+    im.onerror = () => res(dataURL);
+    im.src = dataURL;
+  });
+}
+function avgColor(dataURL){
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement('canvas'); c.width = c.height = 24;
+      const x = c.getContext('2d'); x.drawImage(im, 0, 0, 24, 24);
+      let d;
+      try{ d = x.getImageData(0, 0, 24, 24).data; }catch(e){ return res(null); }
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4){
+        if (d[i+3] < 130) continue;
+        r += d[i]; g += d[i+1]; b += d[i+2]; n++;
+      }
+      if (!n) return res(null);
+      const hex = v => Math.round(v/n).toString(16).padStart(2,'0');
+      res('#' + hex(r) + hex(g) + hex(b));
+    };
+    im.onerror = () => res(null);
+    im.src = dataURL;
+  });
+}
+const imgCache = new Map();
+function getImg(src){
+  if (!src) return null;
+  let im = imgCache.get(src);
+  if (!im){ im = new Image(); im.src = src; imgCache.set(src, im); }
+  return (im.complete && im.naturalWidth) ? im : null;
+}
+
+/* ==========================================================
+   声音
+   ========================================================== */
+let bgmEl = null;
+function refreshBgm(){
+  if (bgmEl){ bgmEl.pause(); bgmEl = null; }
+  if (!cfg.audio.bgm) return;
+  bgmEl = new Audio(cfg.audio.bgm); bgmEl.loop = true; bgmEl.volume = cfg.vol.bgm / 100;
+}
+const playBgm = () => bgmEl && bgmEl.play().catch(() => {});
+const stopBgm = () => { if (bgmEl){ bgmEl.pause(); bgmEl.currentTime = 0; } };
+const sfxGuard = {};
+function sfx(key){
+  const src = cfg.audio[key]; if (!src) return;
+  const now = performance.now();
+  if (now - (sfxGuard[key] || 0) < 45) return;
+  sfxGuard[key] = now;
+  const a = new Audio(src); a.volume = cfg.vol.sfx / 100; a.play().catch(() => {});
+}
+
+/* ==========================================================
+   舞台缩放
+   ========================================================== */
+const stageEl = $('#stage'), cv = $('#gameCanvas'), ctx = cv.getContext('2d');
+let SW = 1080, SH = 1920, fitScale = 1, RATIO = 1;
+
+function applyDisplay(){
+  SW = clamp(+cfg.display.w || 1080, 320, 7680);
+  SH = clamp(+cfg.display.h || 1920, 320, 7680);
+  cfg.display.w = SW; cfg.display.h = SH;
+  stageEl.style.width  = SW + 'px';
+  stageEl.style.height = SH + 'px';
+  stageEl.style.fontSize = (Math.min(SW, SH) / 26) + 'px';
+  cv.style.width = SW + 'px'; cv.style.height = SH + 'px';
+  RATIO = 0;                                  // 强制重算画布像素
+  fitStage();
+}
+// 画布像素只需匹配「实际显示出来的尺寸」：舞台缩到 0.42 时
+// 没必要按 1080×1920×2 渲染，那是 5 倍多的无用像素
+function sizeCanvas(){
+  const want = clamp(fitScale * (window.devicePixelRatio || 1), 0.5, 2);
+  if (Math.abs(want - RATIO) < 0.02 && cv.width > 2) return;
+  RATIO = want;
+  cv.width  = Math.max(2, Math.round(SW * RATIO));
+  cv.height = Math.max(2, Math.round(SH * RATIO));
+  ctx.setTransform(RATIO, 0, 0, RATIO, 0, 0);
+  clearSprites();
+}
+function fitStage(){
+  const vw = window.innerWidth, vh = window.innerHeight;
+  fitScale = cfg.display.fit === 'cover'
+    ? Math.max(vw / SW, vh / SH)
+    : Math.min(vw / SW, vh / SH);
+  stageEl.style.transform = `translate(-50%,-50%) scale(${fitScale})`;
+  sizeCanvas();
+  if ($('#setup').classList.contains('on')) updateResUi();
+}
+addEventListener('resize', fitStage);
+
+function toStage(cx, cy){
+  const r = stageEl.getBoundingClientRect();
+  return { x: (cx - r.left) / fitScale, y: (cy - r.top) / fitScale };
+}
+
+/* ==========================================================
+   屏幕
+   ========================================================== */
+let screen = 'home', resultTimer = null;
+const SCR = { home:'#s-home', game:'#s-game', win:'#s-win', lose:'#s-lose' };
+function go(name){
+  screen = name;
+  clearTimeout(resultTimer); resultTimer = null;
+  Object.entries(SCR).forEach(([k,s]) => $(s).classList.toggle('on', k === name));
+  stageEl.classList.toggle('blade-mode', name === 'game' && cfg.input.hideCursor);
+  if (typeof updateCamVisible === 'function') updateCamVisible();
+  if (name === 'home'){ G.on = false; cfg.vol.bgmMenu ? playBgm() : stopBgm(); }
+  if (name === 'win' || name === 'lose'){
+    if (cfg.vol.duck) stopBgm();
+    // 静默倒数，时间到自动回首页；页面上不显示任何倒数数字
+    const s = +cfg.rules.resultHold || 0;
+    if (s > 0) resultTimer = setTimeout(() => { if (screen === name) go('home'); }, s * 1000);
+  }
+}
+function applyArt(){
+  const set = (sel, src) => {
+    const el = $(sel);
+    el.style.backgroundImage = src ? `url(${src})` : '';
+    el.classList.toggle('fallback', !src);
+  };
+  set('#s-home', cfg.images.home); set('#s-game', cfg.images.game);
+  set('#s-win', cfg.images.win);   set('#s-lose', cfg.images.lose);
+  $('#dimLayer').style.opacity = (cfg.rules.dim || 0) / 100;
+  clearSprites();
+  const t = cfg.texts;
+  const put = (sel, v) => { const el = $(sel); el.textContent = v || ''; el.style.display = v ? '' : 'none'; };
+  put('#homeTitle', t.homeTitle); put('#homeSub', t.homeSub);
+  $('#homeCta').textContent = t.homeCta || '挥手开始';
+  put('#winTitle', t.win); put('#loseTitle', t.lose);
+}
+
+/* ==========================================================
+   刀锋输入
+   ========================================================== */
+const BLADES = [
+  { pts:[], live:false, sx:null, sy:null },
+  { pts:[], live:false, sx:null, sy:null }
+];
+window.Bridge = {
+  mirror: true,
+  hand(i, x, y){
+    i = i | 0;
+    const b = BLADES[i]; if (!b) return;
+    if (i === 1 && !cfg.input.twoHands) return;
+    let nx = clamp(+x, 0, 1), ny = clamp(+y, 0, 1);
+    if (this.mirror) nx = 1 - nx;
+    const k = 1 - cfg.input.smooth / 100;
+    b.sx = b.sx === null ? nx : b.sx + (nx - b.sx) * k;
+    b.sy = b.sy === null ? ny : b.sy + (ny - b.sy) * k;
+    b.live = true;
+    pushBlade(b, b.sx * SW, b.sy * SH);
+  },
+  release(i){ const b = BLADES[i | 0]; if (b){ b.live = false; b.sx = b.sy = null; b.pts.length = 0; } },
+  start(){ actStart(); },
+  status(on){ $('#pad').classList.toggle('live', !!on); $('#padTxt').textContent = on ? '体感设备已连接' : '鼠标测试模式'; }
+};
+function pushBlade(b, x, y){
+  b.pts.push({ x, y, t: performance.now() });
+  if (b.pts.length > 40) b.pts.shift();
+}
+function trimBlades(){
+  const life = cfg.rules.trail, now = performance.now();
+  for (const b of BLADES) while (b.pts.length && now - b.pts[0].t > life) b.pts.shift();
+}
+
+let mouseDown = false;
+function onPointer(e, down){
+  if ($('#setup').classList.contains('on')) return;
+  if (!cfg.input.mouse) return;
+  if (down !== undefined) mouseDown = down;
+  const b = BLADES[0];
+  if (cfg.input.hold && !mouseDown){ b.live = false; b.pts.length = 0; return; }
+  const p = toStage(e.clientX, e.clientY);
+  b.live = true;
+  pushBlade(b, p.x, p.y);
+}
+addEventListener('pointermove', e => onPointer(e));
+addEventListener('pointerdown', e => onPointer(e, true));
+addEventListener('pointerup',   e => onPointer(e, false));
+addEventListener('pointerleave',() => { BLADES[0].live = false; BLADES[0].pts.length = 0; });
+
+/* ==========================================================
+   游戏
+   ========================================================== */
+const G = { on:false, left:0, score:0, cut:0, misses:0, bestCombo:0,
+            fruits:[], pieces:[], drops:[], pops:[], spawnAcc:0,
+            comboN:0, comboT:0, shake:0, flash:0, flashCol:'255,92,92', last:0, cd:0 };
+
+const grav   = () => SH * cfg.rules.gravity / 100;
+const fruitR = () => SW * cfg.rules.size / 200;
+const sensPx = () => SH * cfg.rules.sens / 100;
+
+function resetGame(){
+  Object.assign(G, { on:false, left:cfg.rules.duration, score:0, cut:0, misses:0, bestCombo:0,
+    fruits:[], pieces:[], drops:[], pops:[], spawnAcc:0, comboN:0, comboT:0, shake:0, flash:0, cd:0 });
+  BLADES.forEach(b => { b.pts.length = 0; });
+  buildLives(); drawHud(true);
+}
+function actStart(){
+  if (setupOpen()) return;
+  if (screen === 'game') return;
+  // 结算页不直接重开，一律先回首页，保证每一局都从首页起步
+  if (screen === 'win' || screen === 'lose'){ go('home'); return; }
+  startGame();
+}
+function startGame(){
+  resetGame(); go('game'); playBgm();
+  if (cfg.rules.countdown){ G.cd = 3; $('#countdown').classList.add('on'); tickCd(); }
+  else G.on = true;
+}
+function tickCd(){
+  const el = $('#cdNum');
+  el.textContent = G.cd > 0 ? G.cd : 'GO';
+  el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  if (G.cd <= 0){
+    setTimeout(() => { $('#countdown').classList.remove('on'); if (screen === 'game') G.on = true; }, 600);
+    return;
+  }
+  G.cd--; setTimeout(tickCd, 800);
+}
+function endGame(reason){
+  if (!G.on) return;
+  G.on = false;
+  const win = !reason && G.score >= cfg.rules.goal;
+  if (win){
+    $('#winScore').textContent = G.score;
+    $('#winCut').textContent = G.cut;
+    $('#winCombo').textContent = G.bestCombo;
+    sfx('win'); go('win');
+  } else {
+    $('#loseScore').textContent = G.score;
+    const gap = Math.max(0, cfg.rules.goal - G.score);
+    $('#loseSub').textContent = reason === 'bomb' ? '碰到炸弹了'
+      : reason === 'lives' ? '漏掉太多水果了' : `距离目标还差 ${gap} 分`;
+    sfx('lose'); go('lose');
+  }
+}
+
+function pickItem(){
+  const useBad = cfg.bad.length && Math.random() * 100 < cfg.rules.badRatio;
+  const pool = useBad ? cfg.bad : cfg.good;
+  if (!pool.length) return null;
+  const tot = pool.reduce((s,i) => s + Math.max(.01, i.weight || 1), 0);
+  let r = Math.random() * tot;
+  for (const it of pool){ r -= Math.max(.01, it.weight || 1); if (r <= 0) return { it, bad:useBad }; }
+  return { it: pool[pool.length - 1], bad: useBad };
+}
+function launch(){
+  if (!G.on) return;
+  const p = pickItem(); if (!p) return;
+  const g = grav(), r = fruitR();
+  const peak = SH * (cfg.rules.arc / 100) * rand(.60, 1.06);
+  const x = rand(SW * .12, SW * .88);
+  const vy = -Math.sqrt(2 * g * peak);
+  const vx = ((SW / 2 - x) / SW) * rand(140, 440) + rand(-90, 90);
+  G.fruits.push({ x, y: SH + r * 1.2, vx, vy, rot: rand(0, 6.28), spin: rand(-3, 3), r, it: p.it, bad: p.bad });
+}
+function burst(mult){
+  const lo = cfg.rules.burstMin, hi = Math.max(lo, cfg.rules.burstMax);
+  const n = Math.round(rand(lo, hi));
+  for (let i = 0; i < n; i++) setTimeout(launch, i * rand(70, 200) / mult);
+}
+function segHit(x1,y1,x2,y2,cx,cy,r){
+  const dx = x2 - x1, dy = y2 - y1, l2 = dx*dx + dy*dy;
+  let t = l2 ? ((cx-x1)*dx + (cy-y1)*dy) / l2 : 0;
+  t = clamp(t, 0, 1);
+  const px = x1 + t*dx - cx, py = y1 + t*dy - cy;
+  return px*px + py*py <= r*r;
+}
+
+function sliceFruit(f, ang){
+  const it = f.it, col = it.color || (f.bad ? '#FF5C5C' : '#FFB020');
+  const nx = Math.cos(ang + Math.PI/2), ny = Math.sin(ang + Math.PI/2);
+  for (let s = 0; s < 2; s++){
+    const dir = s ? 1 : -1;
+    G.pieces.push({ x:f.x, y:f.y, r:f.r, it, side:s, rot:f.rot, cutRel: ang - f.rot,
+      vx: f.vx + nx * dir * rand(90, 240), vy: f.vy + ny * dir * rand(90, 240) - 60,
+      spin: f.spin + dir * rand(1.5, 4) });
+  }
+  for (let i = 0; i < 12; i++){
+    const a = ang + rand(-1.3, 1.3) + (Math.random() < .5 ? Math.PI : 0);
+    const sp = rand(150, 640);
+    G.drops.push({ x:f.x, y:f.y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 80, r: rand(3, 11), col, life:1 });
+  }
+  if (G.drops.length > 240) G.drops.splice(0, G.drops.length - 240);
+
+  if (f.bad){
+    addScore(-Math.abs(it.score), f.x, f.y, true);
+    G.comboN = 0; G.shake = 1; G.flash = 1; G.flashCol = '255,92,92';
+    sfx('bomb'); rumble(true);
+    if (cfg.rules.bombFail){ drawHud(); endGame('bomb'); }
+    return;
+  }
+
+  G.cut++;
+  addScore(Math.abs(it.score), f.x, f.y, false);
+  sfx('cut'); sfx('swish'); rumble(false);
+  G.flash = .3; G.flashCol = '255,255,255';
+
+  if (cfg.rules.combo){
+    const now = performance.now();
+    G.comboN = (now - G.comboT < cfg.rules.comboWin) ? G.comboN + 1 : 1;
+    G.comboT = now;
+    if (G.comboN > G.bestCombo) G.bestCombo = G.comboN;
+    if (G.comboN >= 3){
+      const bonus = cfg.rules.comboBonus * (G.comboN - 1);
+      if (bonus > 0) addScore(bonus, SW/2, SH * 0.42, false, true);
+      showCombo(G.comboN, bonus); sfx('combo');
+    }
+  }
+}
+function showCombo(n, bonus){
+  $('#comboN').textContent = '×' + n;
+  $('#comboT').textContent = bonus > 0 ? `连击 +${bonus}` : '连击';
+  const el = $('#combo'); el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+}
+function addScore(n, x, y, bad, big){
+  G.score += n;
+  if (!cfg.rules.allowNeg && G.score < 0) G.score = 0;
+  G.pops.push({ x, y, txt:(n > 0 ? '+' : '') + n, life:1, bad, big });
+}
+function rumble(strong){
+  if (!cfg.input.rumble || !pad) return;
+  try{ pad.vibrationActuator?.playEffect('dual-rumble',
+    { duration: strong ? 260 : 90, strongMagnitude: strong ? .8 : .18, weakMagnitude: strong ? .5 : .35 }); }catch(e){}
+}
+function loseLife(){
+  G.misses++;
+  if (cfg.rules.missPenalty > 0) addScore(-cfg.rules.missPenalty, SW/2, SH * 0.86, true);
+  buildLives();
+  if (cfg.rules.lives > 0 && G.misses >= cfg.rules.lives){ drawHud(); endGame('lives'); }
+}
+function buildLives(){
+  const L = cfg.rules.lives;
+  $('#lives').innerHTML = L > 0
+    ? Array.from({length:L}, (_,i) => `<i class="${i < L - G.misses ? 'on' : ''}">❤️</i>`).join('')
+    : '';
+}
+
+function step(dt){
+  const R = cfg.rules, g = grav();
+  const prog = R.duration ? 1 - G.left / R.duration : 0;
+  const mult = R.ramp ? 1 + (R.rampTo/100 - 1) * prog : 1;
+
+  G.left -= dt;
+  if (G.left <= 0){ G.left = 0; drawHud(); endGame(); return; }
+
+  G.spawnAcc += dt * 1000 * mult;
+  if (G.spawnAcc >= R.spawn){ G.spawnAcc = 0; burst(mult); }
+
+  // 挥砍判定
+  trimBlades();
+  const minSpeed = sensPx();
+  for (const b of BLADES){
+    if (!b.live || b.pts.length < 2) continue;
+    const from = Math.max(1, b.pts.length - 4);
+    for (let i = b.pts.length - 1; i >= from; i--){
+      const p2 = b.pts[i], p1 = b.pts[i-1];
+      const ddt = Math.max(4, p2.t - p1.t) / 1000;
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      if (Math.hypot(dx, dy) / ddt < minSpeed) continue;
+      const ang = Math.atan2(dy, dx);
+      for (let j = G.fruits.length - 1; j >= 0; j--){
+        const f = G.fruits[j];
+        if (segHit(p1.x, p1.y, p2.x, p2.y, f.x, f.y, f.r * .84)){
+          G.fruits.splice(j, 1);
+          sliceFruit(f, ang);
+        }
+      }
+    }
+  }
+
+  for (let i = G.fruits.length - 1; i >= 0; i--){
+    const f = G.fruits[i];
+    f.vy += g * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.spin * dt;
+    if (f.y - f.r > SH + 60){
+      G.fruits.splice(i, 1);
+      if (!f.bad){ G.comboN = 0; if (R.missPenalty > 0 || R.lives > 0) loseLife(); }
+    }
+  }
+  for (let i = G.pieces.length - 1; i >= 0; i--){
+    const p = G.pieces[i];
+    p.vy += g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.spin * dt;
+    if (p.y - p.r > SH + 90) G.pieces.splice(i, 1);
+  }
+  for (let i = G.drops.length - 1; i >= 0; i--){
+    const d = G.drops[i];
+    d.vy += g * .55 * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.life -= dt * 1.05;
+    if (d.life <= 0) G.drops.splice(i, 1);
+  }
+  for (let i = G.pops.length - 1; i >= 0; i--){
+    const p = G.pops[i];
+    p.life -= dt * 1.15; p.y -= (p.big ? 40 : 95) * dt;
+    if (p.life <= 0) G.pops.splice(i, 1);
+  }
+  G.shake = Math.max(0, G.shake - dt * 3);
+  G.flash = Math.max(0, G.flash - dt * 2.4);
+  if (R.combo && G.comboN && performance.now() - G.comboT > R.comboWin) G.comboN = 0;
+}
+
+function drawGlyph(it, r){
+  const im = getImg(it.img);
+  if (im){ ctx.drawImage(im, -r, -r, r*2, r*2); return; }
+  ctx.font = `${r*1.75}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(it.glyph || '🍎', 0, r*0.06);
+}
+
+// 十六进制转 rgba
+function hexA(hex, a){
+  let h = (hex || '#FFB020').replace('#','');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16);
+  const v = isNaN(n) ? 0xFFB020 : n;
+  return `rgba(${(v>>16)&255},${(v>>8)&255},${v&255},${a})`;
+}
+
+/* 预烘焙贴图：光晕和投影只在物品/尺寸变化时画一次，
+   每帧只做 drawImage —— 避免 shadowBlur 每帧重复做高斯模糊 */
+const spriteCache = new Map(), haloCache = new Map();
+function clearSprites(){ spriteCache.clear(); haloCache.clear(); }
+
+function itemSprite(it, r){
+  const key = it.id + '|' + Math.round(r) + '|' + RATIO.toFixed(2);
+  let s = spriteCache.get(key);
+  if (s) return s;
+  const im = it.img ? getImg(it.img) : null;
+  if (it.img && !im) return null;          // 图片还没解码好，本帧先用直绘兜底
+  const size = r * 2.6;                    // 给投影留边
+  const c = document.createElement('canvas');
+  c.width = c.height = Math.max(2, Math.ceil(size * RATIO));
+  const x = c.getContext('2d');
+  x.setTransform(RATIO, 0, 0, RATIO, 0, 0);
+  x.translate(size/2, size/2);
+  x.shadowColor = 'rgba(0,0,0,.6)';
+  x.shadowBlur = r * 0.4;
+  x.shadowOffsetY = r * 0.1;
+  if (im) x.drawImage(im, -r, -r, r*2, r*2);
+  else {
+    x.font = `${r*1.75}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(it.glyph || '🍎', 0, r*0.06);
+  }
+  s = { cv:c, size, half:size/2 };
+  spriteCache.set(key, s);
+  return s;
+}
+function haloSprite(col, r){
+  const key = col + '|' + Math.round(r) + '|' + RATIO.toFixed(2);
+  let s = haloCache.get(key);
+  if (s) return s;
+  const size = r * 3.2;
+  const c = document.createElement('canvas');
+  c.width = c.height = Math.max(2, Math.ceil(size * RATIO));
+  const x = c.getContext('2d');
+  x.setTransform(RATIO, 0, 0, RATIO, 0, 0);
+  x.translate(size/2, size/2);
+  const g = x.createRadialGradient(0, 0, r*0.22, 0, 0, r*1.6);
+  g.addColorStop(0,   hexA(col, .60));
+  g.addColorStop(.45, hexA(col, .26));
+  g.addColorStop(1,   hexA(col, 0));
+  x.fillStyle = g;
+  x.beginPath(); x.arc(0, 0, r*1.6, 0, 6.284); x.fill();
+  s = { cv:c, size, half:size/2 };
+  haloCache.set(key, s);
+  return s;
+}
+
+function draw(){
+  ctx.clearRect(0, 0, SW, SH);
+  ctx.save();
+  if (G.shake > 0) ctx.translate(rand(-1,1) * 22 * G.shake, rand(-1,1) * 22 * G.shake);
+
+  for (const d of G.drops){
+    ctx.globalAlpha = Math.max(0, d.life);
+    ctx.fillStyle = d.col;
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r * (0.4 + d.life * 0.6), 0, 6.284); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  for (const p of G.pieces){
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    const a = p.rot + p.cutRel;
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.rect(-p.r*2.2, p.side ? 0 : -p.r*2.2, p.r*4.4, p.r*2.2);
+    ctx.clip();
+    ctx.rotate(-a); ctx.rotate(p.rot);
+    const ps = itemSprite(p.it, p.r);
+    if (ps) ctx.drawImage(ps.cv, -ps.half, -ps.half, ps.size, ps.size);
+    else drawGlyph(p.it, p.r);
+    ctx.restore();
+  }
+
+  const t = performance.now(), gl = cfg.rules.glow / 100;
+  for (const f of G.fruits){
+    ctx.save(); ctx.translate(f.x, f.y);
+    if (gl > 0){
+      const h = haloSprite(f.it.color || (f.bad ? '#FF5C5C' : '#FFB020'), f.r);
+      ctx.globalAlpha = gl * (f.bad ? 0.75 + 0.45 * Math.sin(t/110) : 1);
+      ctx.drawImage(h.cv, -h.half, -h.half, h.size, h.size);
+      ctx.globalAlpha = 1;
+    }
+    ctx.rotate(f.rot);
+    const s = itemSprite(f.it, f.r);
+    if (s) ctx.drawImage(s.cv, -s.half, -s.half, s.size, s.size);
+    else drawGlyph(f.it, f.r);
+    ctx.restore();
+  }
+
+  for (const b of BLADES){
+    if (!b.live || b.pts.length < 2) continue;
+    const n = b.pts.length, maxW = cfg.rules.blade * (SW / 1080);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = 1; i < n; i++){
+      const k = i / (n - 1);
+      ctx.beginPath(); ctx.moveTo(b.pts[i-1].x, b.pts[i-1].y); ctx.lineTo(b.pts[i].x, b.pts[i].y);
+      ctx.strokeStyle = `rgba(255,176,32,${0.16*k})`;  ctx.lineWidth = maxW*k*2.6;  ctx.stroke();
+      ctx.strokeStyle = `rgba(255,225,150,${0.55*k})`; ctx.lineWidth = maxW*k*1.25; ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.92*k})`; ctx.lineWidth = maxW*k*0.45; ctx.stroke();
+    }
+    const tip = b.pts[n-1];
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.beginPath(); ctx.arc(tip.x, tip.y, maxW*0.42, 0, 6.284); ctx.fill();
+  }
+
+  for (const p of G.pops){
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.font = `700 ${p.big ? SW*0.075 : SW*0.055}px "Chakra Petch",system-ui,sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = SW*0.011; ctx.strokeStyle = 'rgba(7,22,27,.8)';
+    ctx.strokeText(p.txt, p.x, p.y);
+    ctx.fillStyle = p.bad ? '#FF5C5C' : (p.big ? '#FFB020' : '#5FE3C0');
+    ctx.fillText(p.txt, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  if (G.flash > 0){
+    ctx.fillStyle = `rgba(${G.flashCol},${G.flash * 0.26})`;
+    ctx.fillRect(0, 0, SW, SH);
+  }
+}
+
+const SEG_N = 30;
+(function(){ const s = $('#segs'); for (let i = 0; i < SEG_N; i++) s.appendChild(document.createElement('i')); })();
+const segEls = [...$('#segs').querySelectorAll('i')];
+let hudLast = { t:-1, s:-1, lit:-1, goal:-1 };
+function drawHud(force){
+  const R = cfg.rules, tt = Math.ceil(G.left), sc = G.score;
+  if (!force && tt === hudLast.t && sc === hudLast.s && R.goal === hudLast.goal) return;
+  const tv = $('#timeVal');
+  tv.textContent = tt;
+  tv.classList.toggle('low', G.left <= 10);
+  $('#scoreVal').textContent = sc;
+  $('#mNow').textContent = sc; $('#mGoal').textContent = R.goal;
+  const lit = Math.round(clamp(R.goal ? sc / R.goal : 0, 0, 1) * SEG_N);
+  if (force || lit !== hudLast.lit || R.goal !== hudLast.goal){
+    $('#segs').classList.toggle('done', sc >= R.goal);
+    for (let i = 0; i < SEG_N; i++) segEls[i].classList.toggle('f', i < lit);
+  }
+  hudLast = { t:tt, s:sc, lit, goal:R.goal };
+}
+
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - G.last) / 1000 || 0);
+  G.last = now;
+  pollPad(dt);
+  if (screen === 'game'){
+    if (G.on) step(dt); else trimBlades();
+    draw(); drawHud();
+  }
+}
+
+/* ==========================================================
+   手柄
+   ========================================================== */
+let pad = null; const prevBtn = {};
+let padX = null, padY = null;
+addEventListener('gamepadconnected', () => toast('手柄已连接'));
+function setPadUi(p){
+  const live = !!p;
+  $('#padBox').classList.toggle('live', live);
+  $('#padName').textContent = live ? (p.id.length > 44 ? p.id.slice(0,44) + '…' : p.id) : '未检测到手柄';
+  if (live){ $('#pad').classList.add('live'); $('#padTxt').textContent = '手柄已连接'; }
+}
+function pollPad(dt){
+  const list = navigator.getGamepads ? [...navigator.getGamepads()] : [];
+  const p = list.find(g => g && g.connected) || null;
+  if (!!p !== !!pad) setPadUi(p);
+  pad = p;
+  if (!pad) return;
+  const dz = cfg.input.deadzone / 100;
+  const ax = i => { const v = pad.axes[i] || 0; return Math.abs(v) < dz ? 0 : (v - Math.sign(v)*dz)/(1-dz); };
+  const rx = ax(2), ry = ax(3);
+  if (rx || ry){
+    if (padX === null){ padX = SW/2; padY = SH/2; }
+    padX = clamp(padX + rx * cfg.input.padSpeed * dt, 0, SW);
+    padY = clamp(padY + ry * cfg.input.padSpeed * dt, 0, SH);
+    const b = BLADES[0]; b.live = true; pushBlade(b, padX, padY);
+  }
+  const edge = (i, fn) => { const now = !!pad.buttons[i]?.pressed; if (now && !prevBtn[i]) fn(); prevBtn[i] = now; };
+  edge(0, actStart); edge(9, actStart);
+  edge(1, () => { if (screen !== 'home') go('home'); });
+}
+
+/* ==========================================================
+   键盘 / 点击 / 全屏
+   ========================================================== */
+const setupOpen = () => $('#setup').classList.contains('on');
+addEventListener('keydown', e => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+
+  // Q：进入 / 退出设定（在输入框里打字时不触发）
+  if ((e.key === 'q' || e.key === 'Q') && !typing && !e.ctrlKey && !e.metaKey && !e.altKey){
+    e.preventDefault();
+    setupOpen() ? closeSetup() : openSetup();
+    return;
+  }
+  if (e.key === 'Escape' && setupOpen()){ closeSetup(); return; }
+  if (setupOpen()) return;
+
+  if (e.key === 'f' || e.key === 'F') toggleFs();
+  if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); actStart(); }
+});
+addEventListener('click', e => {
+  if (setupOpen()) return;
+  // 设定面板里的按钮（例如「保存并退出」）关闭面板后事件仍在冒泡，
+  // 此时 target 依然位于 #setup 内，据此拦掉，避免误触发开始游戏
+  if (e.target.closest && e.target.closest('#setup')) return;
+  if (e.target.closest('#hot')) return;
+  if (screen !== 'game') actStart();
+});
+function toggleFs(){
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(()=>{});
+  else document.exitFullscreen?.();
+}
+
+/* ==========================================================
+   右上角双击进设定
+   ========================================================== */
+let lastTap = 0;
+$('#hot').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  const t = Date.now();
+  if (t - lastTap < 420) openSetup();
+  lastTap = t;
+});
+$('#hot').addEventListener('dblclick', e => { e.stopPropagation(); openSetup(); });
+function openSetup(){ G.on = false; stopBgm(); syncForm(); updateSize(); $('#setup').classList.add('on'); }
+function closeSetup(){ $('#setup').classList.remove('on'); applyDisplay(); applyArt(); refreshBgm(); resetGame(); go('home'); }
+
+/* ==========================================================
+   设定后台
+   ========================================================== */
+$$('.tab').forEach(t => t.addEventListener('click', () => {
+  $$('.tab').forEach(x => x.classList.remove('on')); t.classList.add('on');
+  $$('.sec').forEach(s => s.classList.toggle('on', s.dataset.sec === t.dataset.sec));
+}));
+
+const PRESETS = [
+  { w:1080, h:1920, n:'1080 × 1920', d:'竖屏 9:16' },
+  { w:1920, h:1080, n:'1920 × 1080', d:'横屏 16:9' },
+  { w:2160, h:3840, n:'2160 × 3840', d:'竖屏 4K' },
+  { w:1080, h:2340, n:'1080 × 2340', d:'长竖屏' },
+  { w:1080, h:1080, n:'1080 × 1080', d:'方屏 1:1' },
+  { w:1536, h:2048, n:'1536 × 2048', d:'竖屏 3:4' }
+];
+$('#resPresets').innerHTML = PRESETS.map((p,i) =>
+  `<button class="res" data-res="${i}">${p.n}<small>${p.d}</small></button>`).join('');
+$('#resPresets').addEventListener('click', e => {
+  const b = e.target.closest('[data-res]'); if (!b) return;
+  const p = PRESETS[+b.dataset.res];
+  $('#resW').value = p.w; $('#resH').value = p.h;
+  updateResUi();
+});
+['#resW','#resH'].forEach(s => $(s).addEventListener('input', updateResUi));
+$('#resFit').addEventListener('change', () => { cfg.display.fit = $('#resFit').value; fitStage(); saveCfg(true); });
+$('#resApply').addEventListener('click', () => {
+  const w = clamp(Math.round(+$('#resW').value) || 1080, 320, 7680);
+  const h = clamp(Math.round(+$('#resH').value) || 1920, 320, 7680);
+  cfg.display.w = w; cfg.display.h = h; cfg.display.fit = $('#resFit').value;
+  $('#resW').value = w; $('#resH').value = h;
+  applyDisplay(); resetGame(); buildSlots(); updateResUi(); saveCfg(true);
+  toast(`分辨率已设为 ${w} × ${h}`);
+});
+function gcd(a,b){ return b ? gcd(b, a % b) : a; }
+function updateResUi(){
+  const w = clamp(Math.round(+$('#resW').value) || 1080, 1, 99999);
+  const h = clamp(Math.round(+$('#resH').value) || 1920, 1, 99999);
+  const g = gcd(w, h) || 1;
+  $('#resRatio').textContent = `${w/g} : ${h/g}`;
+  $('#resOrient').textContent = w === h ? '方屏' : (w > h ? '横屏' : '竖屏');
+  const applied = (w === cfg.display.w && h === cfg.display.h);
+  $('#resScale').textContent = applied ? Math.round(fitScale * 100) + '%' : '未应用';
+  const s = $('#resShape'), k = Math.min(48/w, 48/h);
+  s.style.width = Math.max(6, w*k) + 'px'; s.style.height = Math.max(6, h*k) + 'px';
+  $$('#resPresets .res').forEach((el,i) => el.classList.toggle('on', PRESETS[i].w === w && PRESETS[i].h === h));
+}
+
+const SLOTS = [['home','首页图'],['game','游戏页面背景'],['win','成功页面'],['lose','失败页面']];
+function buildSlots(){
+  $('#screenSlots').innerHTML = SLOTS.map(([k,l]) => `
+    <div class="card"><h3>${l}</h3>
+      <div class="slotwrap">
+        <button class="slot" data-img="${k}" style="aspect-ratio:${cfg.display.w} / ${cfg.display.h};max-height:280px;margin:0 auto">
+          <span>点击上传<br>建议 ${cfg.display.w} × ${cfg.display.h}</span></button>
+        <button class="slot-x" data-clr="${k}">×</button>
+      </div></div>`).join('');
+  syncSlots();
+}
+function syncSlots(){
+  $$('[data-img]').forEach(el => {
+    const src = cfg.images[el.dataset.img];
+    el.style.backgroundImage = src ? `url(${src})` : '';
+    el.classList.toggle('has', !!src);
+  });
+}
+document.addEventListener('click', async e => {
+  const up = e.target.closest('[data-img]');
+  if (up){
+    const f = await pickFile('image/*'); if (!f) return;
+    let d = await readDataURL(f);
+    d = await shrink(d, Math.min(2160, Math.max(cfg.display.w, cfg.display.h)), false);
+    cfg.images[up.dataset.img] = d; syncSlots(); applyArt(); saveCfg(true); toast('图片已更新');
+  }
+  const clr = e.target.closest('[data-clr]');
+  if (clr){ cfg.images[clr.dataset.clr] = null; syncSlots(); applyArt(); saveCfg(true); }
+});
+
+function renderItems(kind){
+  clearSprites();
+  const list = cfg[kind], host = $(kind === 'good' ? '#listGood' : '#listBad');
+  host.innerHTML = list.map((it,i) => `
+    <div class="item ${kind === 'bad' ? 'bad' : ''}" data-k="${kind}" data-i="${i}">
+      <button class="thumb" data-act="img" style="${it.img ? `background-image:url(${it.img})` : ''}">${it.img ? '' : it.glyph}</button>
+      <input class="inp" style="padding:7px 9px;font-size:12px" data-act="name" value="${(it.name||'').replace(/"/g,'&quot;')}" placeholder="名称">
+      <div class="row"><label>${kind === 'good' ? '加分' : '扣分'}</label>
+        <input class="inp" style="padding:7px 9px;font-size:13px" data-act="score" type="number" min="0" max="999" value="${Math.abs(it.score)}"></div>
+      <div class="row"><label>权重</label>
+        <input class="inp" style="padding:7px 9px;font-size:13px" data-act="weight" type="number" min="0" max="20" step="0.5" value="${it.weight}"></div>
+      <div class="row"><label>${kind === 'good' ? '汁液' : '爆点'}</label>
+        <input data-act="color" type="color" value="${it.color || '#FFB020'}">
+        <button class="del" data-act="del" style="flex:1">移除</button></div>
+    </div>`).join('') + `<button class="add" data-add="${kind}"><b>+</b>添加${kind === 'good' ? '水果' : '炸弹'}</button>`;
+  $(kind === 'good' ? '#cntGood' : '#cntBad').value = list.length;
+}
+document.addEventListener('click', e => {
+  const add = e.target.closest('[data-add]');
+  if (add){ const k = add.dataset.add; if (cfg[k].length < 24){ cfg[k].push(mkItem(k, cfg[k].length)); renderItems(k); saveCfg(true);} return; }
+  const st = e.target.closest('[data-cnt]');
+  if (st){
+    const k = st.dataset.cnt, d = +st.dataset.d;
+    if (d > 0 && cfg[k].length < 24) cfg[k].push(mkItem(k, cfg[k].length));
+    if (d < 0 && cfg[k].length > 0) cfg[k].pop();
+    renderItems(k); saveCfg(true); return;
+  }
+  const cell = e.target.closest('.item'); if (!cell) return;
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  const k = cell.dataset.k, i = +cell.dataset.i;
+  if (act === 'del'){ cfg[k].splice(i,1); renderItems(k); saveCfg(true); }
+  if (act === 'img'){
+    pickFile('image/*').then(async f => {
+      if (!f) return;
+      let d = await readDataURL(f);
+      d = await shrink(d, 512, true);
+      cfg[k][i].img = d;
+      const c = await avgColor(d); if (c) cfg[k][i].color = c;
+      renderItems(k); saveCfg(true); toast('图片已更新，特效颜色已自动取色');
+    });
+  }
+});
+document.addEventListener('input', e => {
+  const cell = e.target.closest('.item'); if (!cell) return;
+  const act = e.target.dataset.act, k = cell.dataset.k, i = +cell.dataset.i;
+  const it = cfg[k]?.[i]; if (!act || !it) return;
+  if (act === 'name') it.name = e.target.value;
+  if (act === 'score') it.score = Math.abs(+e.target.value || 0);
+  if (act === 'weight') it.weight = Math.max(0, +e.target.value || 0);
+  if (act === 'color') it.color = e.target.value;
+});
+$('#bulkGood').addEventListener('input', e => $('#bulkGoodVal').textContent = e.target.value);
+$('#bulkGoodApply').addEventListener('click', () => {
+  const v = +$('#bulkGood').value;
+  cfg.good.forEach(it => it.score = v);
+  renderItems('good'); saveCfg(true); toast(`所有水果已设为 ${v} 分`);
+});
+
+const AUD = [
+  ['bgm','游戏背景音乐','循环播放'],
+  ['cut','切中水果音效','每次切中播放'],
+  ['bomb','切中炸弹音效','碰到炸弹时播放'],
+  ['swish','挥砍破空音效','切中时叠加播放'],
+  ['combo','连击音效','达成 3 连击以上时播放'],
+  ['win','成功音效','进入成功页时播放'],
+  ['lose','失败音效','进入失败页时播放']
+];
+function renderAudio(){
+  $('#audioRows').innerHTML = AUD.map(([k,t,d]) => {
+    const has = !!cfg.audio[k];
+    return `<div class="audio-row">
+      <div class="nm"><b>${t}</b><i class="${has?'set':''}">${has ? (cfg.audioNames[k] || '已上传') : d}</i></div>
+      ${has ? `<button class="mini" data-aplay="${k}">试听</button><button class="mini" data-aclr="${k}" style="color:var(--coral)">移除</button>` : ''}
+      <button class="mini" data-aud="${k}">${has ? '更换' : '上传'}</button></div>`;
+  }).join('');
+}
+let prevAudio = null;
+document.addEventListener('click', async e => {
+  const up = e.target.closest('[data-aud]');
+  if (up){
+    const f = await pickFile('audio/*'); if (!f) return;
+    if (f.size > 12*1024*1024){ toast('音频超过 12MB，请压缩后再上传', true); return; }
+    cfg.audio[up.dataset.aud] = await readDataURL(f);
+    cfg.audioNames[up.dataset.aud] = f.name;
+    renderAudio(); refreshBgm(); saveCfg(true); toast('音频已更新');
+  }
+  const clr = e.target.closest('[data-aclr]');
+  if (clr){ const k = clr.dataset.aclr; cfg.audio[k] = null; cfg.audioNames[k] = ''; renderAudio(); refreshBgm(); saveCfg(true); }
+  const pl = e.target.closest('[data-aplay]');
+  if (pl){
+    prevAudio?.pause();
+    prevAudio = new Audio(cfg.audio[pl.dataset.aplay]);
+    prevAudio.volume = (pl.dataset.aplay === 'bgm' ? cfg.vol.bgm : cfg.vol.sfx) / 100;
+    prevAudio.play().catch(() => toast('无法播放该音频格式', true));
+  }
+});
+
+const R_ = () => cfg.rules, I_ = () => cfg.input, V_ = () => cfg.vol, K_ = () => cfg.kinect;
+const RANGES = [
+  ['#rDur','#vDur',        v => R_().duration = +v,    v => v + ' 秒',    () => R_().duration],
+  ['#rGoal','#vGoal',      v => R_().goal = +v,        v => v + ' 分',    () => R_().goal],
+  ['#rMiss','#vMiss',      v => R_().missPenalty = +v, v => v + ' 分',    () => R_().missPenalty],
+  ['#rLives','#vLives',    v => R_().lives = +v,       v => +v ? v + ' 条' : '不限', () => R_().lives],
+  ['#rHold','#vHold',      v => R_().resultHold = +v,  v => +v ? v + ' 秒' : '不自动返回', () => R_().resultHold],
+  ['#rSpawn','#vSpawn',    v => R_().spawn = +v,       v => v + ' ms',    () => R_().spawn],
+  ['#rBMin','#vBMin',      v => R_().burstMin = +v,    v => v + ' 个',    () => R_().burstMin],
+  ['#rBMax','#vBMax',      v => R_().burstMax = +v,    v => v + ' 个',    () => R_().burstMax],
+  ['#rArc','#vArc',        v => R_().arc = +v,         v => v + '%',      () => R_().arc],
+  ['#rGrav','#vGrav',      v => R_().gravity = +v,     v => (v/100).toFixed(1) + '×', () => R_().gravity],
+  ['#rBadRatio','#vBadRatio', v => R_().badRatio = +v, v => v + '%',      () => R_().badRatio],
+  ['#rSize','#vSize',      v => R_().size = +v,        v => v + '%',      () => R_().size],
+  ['#rSens','#vSens',      v => R_().sens = +v,        v => v + '%/秒',   () => R_().sens],
+  ['#rTrail','#vTrail',    v => R_().trail = +v,       v => v + ' ms',    () => R_().trail],
+  ['#rBlade','#vBlade',    v => R_().blade = +v,       v => v + ' px',    () => R_().blade],
+  ['#rGlow','#vGlow',      v => R_().glow = +v,        v => v + '%',      () => R_().glow],
+  ['#rDim','#vDim',        v => { R_().dim = +v; $('#dimLayer').style.opacity = v/100; }, v => v + '%', () => R_().dim],
+  ['#rComboWin','#vComboWin',     v => R_().comboWin = +v,   v => v + ' ms', () => R_().comboWin],
+  ['#rComboBonus','#vComboBonus', v => R_().comboBonus = +v, v => v + ' 分', () => R_().comboBonus],
+  ['#rRamp','#vRamp',      v => R_().rampTo = +v,      v => (v/100).toFixed(1) + '×', () => R_().rampTo],
+  ['#rVolBgm','#vVolBgm',  v => { V_().bgm = +v; if (bgmEl) bgmEl.volume = v/100; }, v => v + '%', () => V_().bgm],
+  ['#rVolSfx','#vVolSfx',  v => V_().sfx = +v,         v => v + '%',      () => V_().sfx],
+  ['#rDead','#vDead',      v => I_().deadzone = +v,    v => (v/100).toFixed(2), () => I_().deadzone],
+  ['#rPadSpd','#vPadSpd',  v => I_().padSpeed = +v,    v => v,            () => I_().padSpeed],
+  ['#rSmooth','#vSmooth',  v => I_().smooth = +v,      v => (v/100).toFixed(2), () => I_().smooth],
+  ['#rKSize','#vKSize',    v => { K_().size = +v; applyCam(); },    v => v + '%', () => K_().size],
+  ['#rKRad','#vKRad',      v => { K_().radius = +v; applyCam(); },  v => v + '%', () => K_().radius],
+  ['#rKOp','#vKOp',        v => { K_().opacity = +v; applyCam(); }, v => v + '%', () => K_().opacity],
+  ['#rKRange','#vKRange',  v => K_().range = +v,       v => v + '%',      () => K_().range]
+];
+RANGES.forEach(([sel,out,set,fmt]) => {
+  $(sel).addEventListener('input', e => { set(e.target.value); $(out).textContent = fmt(e.target.value); });
+  $(sel).addEventListener('change', () => saveCfg(true));
+});
+const SWITCHES = [
+  ['#cAllowNeg',  v => R_().allowNeg = v,   () => R_().allowNeg],
+  ['#cCombo',     v => R_().combo = v,      () => R_().combo],
+  ['#cRamp',      v => R_().ramp = v,       () => R_().ramp],
+  ['#cCountdown', v => R_().countdown = v,  () => R_().countdown],
+  ['#cBombFail',  v => R_().bombFail = v,   () => R_().bombFail],
+  ['#cBgmMenu',   v => V_().bgmMenu = v,    () => V_().bgmMenu],
+  ['#cDuck',      v => V_().duck = v,       () => V_().duck],
+  ['#cMouse',     v => I_().mouse = v,      () => I_().mouse],
+  ['#cHold',      v => I_().hold = v,       () => I_().hold],
+  ['#cHideCursor',v => I_().hideCursor = v, () => I_().hideCursor],
+  ['#cRumble',    v => I_().rumble = v,     () => I_().rumble],
+  ['#cTwoHands',  v => I_().twoHands = v,   () => I_().twoHands],
+  ['#cKOn',       v => { K_().on = v; v ? kinConnect() : (KIN.ws && KIN.ws.close()); applyCam(); }, () => K_().on],
+  ['#cKMirror',   v => { K_().mirror = v; applyCam(); },   () => K_().mirror],
+  ['#cKSkel',     v => { K_().skeleton = v; applyCam(); }, () => K_().skeleton],
+  ['#cKBorder',   v => { K_().border = v; applyCam(); },   () => K_().border],
+  ['#cKHome',     v => { K_().onHome = v; applyCam(); },   () => K_().onHome],
+  ['#cKRaise',    v => K_().raiseStart = v,  () => K_().raiseStart]
+];
+SWITCHES.forEach(([sel,set]) => $(sel).addEventListener('change', e => { set(e.target.checked); saveCfg(true); }));
+
+$('#kUrl').addEventListener('change', e => { cfg.kinect.url = e.target.value.trim(); kinConnect(); saveCfg(true); });
+$('#kPos').addEventListener('change', e => { cfg.kinect.pos = e.target.value; applyCam(); saveCfg(true); });
+$('#kinReconnect').addEventListener('click', () => { kinConnect(); toast('正在重连桥接程序…'); });
+const TEXTS = [['#txtHomeTitle','homeTitle'],['#txtHomeSub','homeSub'],['#txtHomeCta','homeCta'],['#txtWin','win'],['#txtLose','lose']];
+TEXTS.forEach(([sel,k]) => {
+  $(sel).addEventListener('input', e => { cfg.texts[k] = e.target.value; applyArt(); });
+  $(sel).addEventListener('change', () => saveCfg(true));
+});
+
+function syncForm(){
+  $('#resW').value = cfg.display.w; $('#resH').value = cfg.display.h; $('#resFit').value = cfg.display.fit;
+  updateResUi(); buildSlots(); renderItems('good'); renderItems('bad'); renderAudio();
+  RANGES.forEach(([sel,out,,fmt,get]) => { const v = get(); $(sel).value = v; $(out).textContent = fmt(v); });
+  SWITCHES.forEach(([sel,,get]) => $(sel).checked = !!get());
+  TEXTS.forEach(([sel,k]) => $(sel).value = cfg.texts[k] || '');
+  $('#kUrl').value = cfg.kinect.url || '';
+  $('#kPos').value = cfg.kinect.pos || 'br';
+  applyCam();
+  $('#bulkGoodVal').textContent = $('#bulkGood').value;
+}
+
+$('#btnSaveExit').addEventListener('click', async () => { await saveCfg(); closeSetup(); });
+$('#btnPreview').addEventListener('click', async () => {
+  await saveCfg(true);
+  $('#setup').classList.remove('on');
+  applyDisplay(); applyArt(); refreshBgm(); startGame();
+});
+$('#btnFs').addEventListener('click', toggleFs);
+
+const cfgSize = () => new Blob([JSON.stringify(cfg)]).size;
+function updateSize(){
+  const b = cfgSize();
+  $('#sizeInfo').textContent = b > 1048576 ? (b/1048576).toFixed(2) + ' MB' : Math.round(b/1024) + ' KB';
+}
+$('#btnExport').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(cfg)], { type:'application/json' }));
+  a.download = 'config.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast('已导出 config.json');
+});
+$('#btnImport').addEventListener('click', async () => {
+  const f = await pickFile('application/json,.json'); if (!f) return;
+  try{
+    cfg = merge(defaults(), JSON.parse(await f.text()));
+    applyDisplay(); applyArt(); refreshBgm(); syncForm(); resetGame(); saveCfg(true);
+    toast('配置已导入');
+  }catch(err){ toast('文件格式不正确，无法导入', true); }
+});
+$('#btnReset').addEventListener('click', () => {
+  if (!confirm('恢复出厂设置会清空所有图片、音频和参数，确定继续？')) return;
+  cfg = defaults(); applyDisplay(); applyArt(); refreshBgm(); syncForm(); resetGame(); saveCfg(true);
+  toast('已恢复出厂设置');
+});
+function merge(base, src){
+  if (!src || typeof src !== 'object') return base;
+  const out = Array.isArray(base) ? [] : { ...base };
+  for (const k of Object.keys(base)){
+    if (Array.isArray(base[k])) out[k] = Array.isArray(src[k]) ? src[k] : base[k];
+    else if (base[k] && typeof base[k] === 'object') out[k] = merge(base[k], src[k]);
+    else out[k] = src[k] === undefined ? base[k] : src[k];
+  }
+  return out;
+}
+
+/* ==========================================================
+   Kinect 体感桥接：自动连接 KinectBridge.exe
+   ========================================================== */
+const KIN = { ws:null, retry:null, live:false, raiseT:0, cool:0, body:null };
+const BONES = [
+  ['Head','Neck'],['Neck','SpineShoulder'],['SpineShoulder','SpineMid'],['SpineMid','SpineBase'],
+  ['SpineShoulder','ShoulderRight'],['ShoulderRight','ElbowRight'],['ElbowRight','WristRight'],['WristRight','HandRight'],
+  ['SpineShoulder','ShoulderLeft'],['ShoulderLeft','ElbowLeft'],['ElbowLeft','WristLeft'],['WristLeft','HandLeft'],
+  ['SpineBase','HipRight'],['HipRight','KneeRight'],['KneeRight','AnkleRight'],
+  ['SpineBase','HipLeft'],['HipLeft','KneeLeft'],['KneeLeft','AnkleLeft']
+];
+const camEl = $('#cam'), camImg = $('#camImg'), camCv = $('#camSkel'), camCtx = camCv.getContext('2d');
+
+function kinHost(){
+  return (cfg.kinect.url || '127.0.0.1:8181').replace(/^\w+:\/\//, '').replace(/\/+$/, '');
+}
+function applyCam(){
+  const k = cfg.kinect;
+  Bridge.mirror = k.mirror;
+  camEl.className = k.pos + (k.mirror ? ' mir' : '') + (k.border ? ' bd' : '')
+                  + (KIN.live ? ' live' : '') + (camEl.classList.contains('on') ? ' on' : '');
+  camEl.style.width = k.size + '%';
+  camEl.style.borderRadius = k.radius + '%';
+  camEl.style.opacity = k.opacity / 100;
+  updateCamVisible();
+  kinStatusUi();
+}
+function updateCamVisible(){
+  const k = cfg.kinect;
+  const show = k.on && (screen === 'game' || k.onHome);
+  camEl.classList.toggle('on', show);
+}
+function kinStatusUi(){
+  const box = $('#kinBox'); if (!box) return;
+  box.classList.toggle('live', KIN.live);
+  $('#kinName').textContent = KIN.live ? '桥接程序已连接' : '未连接桥接程序';
+  $('#kinInfo').textContent = KIN.live
+    ? 'ws://' + kinHost() + '/ws · 骨骼数据正常'
+    : '请先运行 KinectBridge.exe，游戏会每 3 秒自动重试';
+  $('#pad').classList.toggle('live', KIN.live);
+  $('#padTxt').textContent = KIN.live ? '体感设备已连接' : (cfg.input.mouse ? '鼠标测试模式' : '等待体感设备');
+}
+function kinDrop(){
+  KIN.live = false; KIN.body = null;
+  camEl.classList.remove('live');
+  camImg.removeAttribute('src');
+  Bridge.release(0); Bridge.release(1);
+  kinStatusUi();
+}
+function kinConnect(){
+  clearTimeout(KIN.retry);
+  if (!cfg.kinect.on) return;
+  try { if (KIN.ws) { KIN.ws.onclose = null; KIN.ws.close(); } } catch(e){}
+  let ws;
+  try { ws = new WebSocket('ws://' + kinHost() + '/ws'); }
+  catch(e){ KIN.retry = setTimeout(kinConnect, 3000); return; }
+  KIN.ws = ws;
+  ws.onopen = () => {
+    KIN.live = true;
+    camEl.classList.add('live');
+    camImg.src = 'http://' + kinHost() + '/video?t=' + Date.now();
+    kinStatusUi();
+  };
+  ws.onmessage = e => { try { onSkeleton(JSON.parse(e.data)); } catch(err){} };
+  ws.onerror = () => {};
+  ws.onclose = () => { kinDrop(); KIN.retry = setTimeout(kinConnect, 3000); };
+}
+// 画面尺寸随桥接送来的实际比例自适应
+camImg.addEventListener('load', () => {
+  if (camImg.naturalWidth) camEl.style.aspectRatio = camImg.naturalWidth + ' / ' + camImg.naturalHeight;
+});
+
+function onSkeleton(d){
+  const k = cfg.kinect;
+  const b = (d && d.body) || null;
+  KIN.body = b;
+  drawSkel(b);
+  if (!b){ Bridge.release(0); Bridge.release(1); KIN.raiseT = 0; return; }
+
+  // 把画面中间 range% 的区域映射到整个屏幕，玩家不用把手伸到极限
+  const lo = (1 - k.range / 100) / 2;
+  const mp = n => clamp((n - lo) / Math.max(.05, 1 - 2 * lo), 0, 1);
+  const j = b.j || {};
+  const hr = j.HandRight, hl = j.HandLeft;
+  if (hr) Bridge.hand(0, mp(hr.x), mp(hr.y)); else Bridge.release(0);
+  if (cfg.input.twoHands && hl) Bridge.hand(1, mp(hl.x), mp(hl.y)); else Bridge.release(1);
+
+  // 举手过头 = 开始 / 返回首页
+  if (k.raiseStart && screen !== 'game' && !setupOpen()){
+    const head = j.Head;
+    const up = head && ((hr && hr.y < head.y - .04) || (hl && hl.y < head.y - .04));
+    if (up && performance.now() > (KIN.cool || 0)){
+      if (!KIN.raiseT) KIN.raiseT = performance.now();
+      else if (performance.now() - KIN.raiseT > 600){
+        KIN.raiseT = 0;
+        KIN.cool = performance.now() + 1200;   // 同一次举手不会连触发两次
+        actStart();
+      }
+    } else if (!up) KIN.raiseT = 0;
+  }
+}
+function drawSkel(b){
+  const r = camEl.getBoundingClientRect();
+  if (!r.width) return;
+  const w = Math.round(r.width / fitScale), h = Math.round(r.height / fitScale);
+  if (camCv.width !== w || camCv.height !== h){ camCv.width = w; camCv.height = h; }
+  camCtx.clearRect(0, 0, w, h);
+  if (!b || !cfg.kinect.skeleton) return;
+  const j = b.j || {};
+  camCtx.lineCap = 'round';
+  camCtx.strokeStyle = 'rgba(95,227,192,.85)';
+  camCtx.lineWidth = Math.max(2, w * 0.012);
+  camCtx.beginPath();
+  for (const [a, c] of BONES){
+    const p = j[a], q = j[c];
+    if (!p || !q) continue;
+    camCtx.moveTo(p.x * w, p.y * h); camCtx.lineTo(q.x * w, q.y * h);
+  }
+  camCtx.stroke();
+  for (const n of ['HandRight','HandLeft']){
+    const p = j[n]; if (!p) continue;
+    camCtx.fillStyle = '#FFB020';
+    camCtx.beginPath(); camCtx.arc(p.x * w, p.y * h, w * 0.032, 0, 6.284); camCtx.fill();
+  }
+}
+
+/* ==========================================================
+   启动
+   ========================================================== */
+async function boot(){
+  // 优先用本机保存的设定；没有再去读同目录的 config.json
+  let loaded = false;
+  const saved = await Store.get('ninjaCfg');
+  if (saved){ cfg = merge(defaults(), saved); loaded = true; }
+  if (!loaded){
+    try{
+      const r = await fetch('./config.json', { cache:'no-store' });
+      if (r.ok){ cfg = merge(defaults(), await r.json()); await Store.set('ninjaCfg', cfg); }
+    }catch(e){ /* file:// 下无此文件属正常 */ }
+  }
+  applyDisplay(); applyArt(); refreshBgm(); syncForm(); resetGame(); go('home');
+  applyCam(); kinConnect();
+  requestAnimationFrame(loop);
+}
+boot();
+</script>
+</body>
+</html>
